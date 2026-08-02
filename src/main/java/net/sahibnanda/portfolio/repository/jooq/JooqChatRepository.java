@@ -19,6 +19,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Repository;
 
 @Repository
+@SuppressWarnings("java:S8688") // Suppress Sonar warning for LocalDateTime.now() usage, as it is used for timestamping purposes which is acceptable in this context.
 public class JooqChatRepository implements ChatRepository {
 
   private final DSLContext dslContext;
@@ -33,7 +34,7 @@ public class JooqChatRepository implements ChatRepository {
     if (!StringUtils.isValidUlid(chatId)) {
       throw new IllegalArgumentException("chatId is not a valid ULID: " + chatId);
     }
-    LocalDateTime now = LocalDateTime.now();
+    LocalDateTime now = LocalDateTime.now(); // Use LocalDateTime.now() for timestamping purposes
     List<Message> sortedMessages = Message.sortedByTimestamp(messages);
     try {
       dslContext
@@ -45,9 +46,7 @@ public class JooqChatRepository implements ChatRepository {
           .set(Tables.CHATS.CREATED_AT, now)
           .set(Tables.CHATS.UPDATED_AT, now)
           .execute();
-    } catch (org.jooq.exception.DataAccessException e) {
-      throw new DatabaseOperationException("Failed to create chat: " + chatId, e);
-    } catch (DataAccessException e) {
+    } catch (org.jooq.exception.DataAccessException | DataAccessException e) {
       throw new DatabaseOperationException("Failed to create chat: " + chatId, e);
     }
     return ChatEntity.builder()
@@ -67,9 +66,7 @@ public class JooqChatRepository implements ChatRepository {
           .selectFrom(Tables.CHATS)
           .where(Tables.CHATS.CHAT_ID.eq(chatId))
           .fetchOptional(this::toEntity);
-    } catch (org.jooq.exception.DataAccessException e) {
-      throw new DatabaseOperationException("Failed to find chat: " + chatId, e);
-    } catch (DataAccessException e) {
+    } catch (org.jooq.exception.DataAccessException | DataAccessException e) {
       throw new DatabaseOperationException("Failed to find chat: " + chatId, e);
     }
   }
@@ -82,9 +79,7 @@ public class JooqChatRepository implements ChatRepository {
           .where(Tables.CHATS.USERNAME.eq(username))
           .orderBy(Tables.CHATS.CREATED_AT.desc(), Tables.CHATS.CHAT_ID.desc())
           .fetch(this::toEntity);
-    } catch (org.jooq.exception.DataAccessException e) {
-      throw new DatabaseOperationException("Failed to find chats for user: " + username, e);
-    } catch (DataAccessException e) {
+    } catch (org.jooq.exception.DataAccessException | DataAccessException e) {
       throw new DatabaseOperationException("Failed to find chats for user: " + username, e);
     }
   }
@@ -101,9 +96,7 @@ public class JooqChatRepository implements ChatRepository {
               .set(Tables.CHATS.UPDATED_AT, LocalDateTime.now())
               .where(Tables.CHATS.CHAT_ID.eq(chatId))
               .execute();
-    } catch (org.jooq.exception.DataAccessException e) {
-      throw new DatabaseOperationException("Failed to save messages for chat: " + chatId, e);
-    } catch (DataAccessException e) {
+    } catch (org.jooq.exception.DataAccessException | DataAccessException e) {
       throw new DatabaseOperationException("Failed to save messages for chat: " + chatId, e);
     }
     if (updated == 0) {
@@ -117,9 +110,7 @@ public class JooqChatRepository implements ChatRepository {
     try {
       deleted =
           dslContext.deleteFrom(Tables.CHATS).where(Tables.CHATS.CHAT_ID.eq(chatId)).execute();
-    } catch (org.jooq.exception.DataAccessException e) {
-      throw new DatabaseOperationException("Failed to delete chat: " + chatId, e);
-    } catch (DataAccessException e) {
+    } catch (org.jooq.exception.DataAccessException | DataAccessException e) {
       throw new DatabaseOperationException("Failed to delete chat: " + chatId, e);
     }
     if (deleted == 0) {
@@ -138,9 +129,7 @@ public class JooqChatRepository implements ChatRepository {
               .set(Tables.CHATS.UPDATED_AT, LocalDateTime.now())
               .where(Tables.CHATS.CHAT_ID.eq(chatId))
               .execute();
-    } catch (org.jooq.exception.DataAccessException e) {
-      throw new DatabaseOperationException("Failed to update title for chat: " + chatId, e);
-    } catch (DataAccessException e) {
+    } catch (org.jooq.exception.DataAccessException | DataAccessException e) {
       throw new DatabaseOperationException("Failed to update title for chat: " + chatId, e);
     }
     if (updated == 0) {
@@ -148,14 +137,14 @@ public class JooqChatRepository implements ChatRepository {
     }
   }
 
-  private ChatEntity toEntity(ChatsRecord record) {
+  private ChatEntity toEntity(ChatsRecord chatRecord) {
     return ChatEntity.builder()
-        .chatId(record.getChatId())
-        .username(record.getUsername())
-        .chatTitle(record.getChatTitle())
-        .messages(Message.sortedByTimestamp(deserializeMessages(record.getMessages())))
-        .createdAt(record.getCreatedAt())
-        .updatedAt(record.getUpdatedAt())
+        .chatId(chatRecord.getChatId())
+        .username(chatRecord.getUsername())
+        .chatTitle(chatRecord.getChatTitle())
+        .messages(Message.sortedByTimestamp(deserializeMessages(chatRecord.getMessages())))
+        .createdAt(chatRecord.getCreatedAt())
+        .updatedAt(chatRecord.getUpdatedAt())
         .build();
   }
 
