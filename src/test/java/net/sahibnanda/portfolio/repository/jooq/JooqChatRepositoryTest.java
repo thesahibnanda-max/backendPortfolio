@@ -41,8 +41,7 @@ class JooqChatRepositoryTest extends AbstractRepositoryIntegrationTest {
 
   @Test
   void createRejectsNonUlidChatId() {
-    assertThatThrownBy(
-            () -> chatRepository.create("not-a-ulid", "alice", "Chat 1", List.of()))
+    assertThatThrownBy(() -> chatRepository.create("not-a-ulid", "alice", "Chat 1", List.of()))
         .isInstanceOf(IllegalArgumentException.class);
   }
 
@@ -80,8 +79,7 @@ class JooqChatRepositoryTest extends AbstractRepositoryIntegrationTest {
 
   @Test
   void saveMessagesThrowsWhenChatMissing() {
-    assertThatThrownBy(
-            () -> chatRepository.saveMessages(StringUtils.generateUlid(), List.of()))
+    assertThatThrownBy(() -> chatRepository.saveMessages(StringUtils.generateUlid(), List.of()))
         .isInstanceOf(ChatNotFoundException.class);
   }
 
@@ -114,8 +112,7 @@ class JooqChatRepositoryTest extends AbstractRepositoryIntegrationTest {
 
   @Test
   void updateChatTitleThrowsWhenChatMissing() {
-    assertThatThrownBy(
-            () -> chatRepository.updateChatTitle(StringUtils.generateUlid(), "Renamed"))
+    assertThatThrownBy(() -> chatRepository.updateChatTitle(StringUtils.generateUlid(), "Renamed"))
         .isInstanceOf(ChatNotFoundException.class);
   }
 

@@ -66,7 +66,9 @@ public class GroqClient {
     Request httpRequest =
         new Request.Builder()
             .url(chatCompletionsUrl)
-            .header("Authorization", "Bearer " + properties.getApiKey()) // Add the Authorization header with the API key
+            .header(
+                "Authorization",
+                "Bearer " + properties.getApiKey()) // Add the Authorization header with the API key
             .post(requestBody)
             .build();
 

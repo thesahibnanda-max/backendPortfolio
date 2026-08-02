@@ -33,8 +33,7 @@ public class SchemaInitializer implements ApplicationRunner {
     try (InputStream inputStream = resource.getInputStream()) {
       return StreamUtils.copyToString(inputStream, StandardCharsets.UTF_8);
     } catch (IOException e) {
-      throw new UncheckedIOException(
-          "Failed to read schema script: " + SCHEMA_SCRIPT_LOCATION, e);
+      throw new UncheckedIOException("Failed to read schema script: " + SCHEMA_SCRIPT_LOCATION, e);
     }
   }
 }

@@ -8,7 +8,8 @@ import org.junit.jupiter.api.Test;
 
 class SchemaInitializerTest extends AbstractRepositoryIntegrationTest {
 
-  @org.springframework.beans.factory.annotation.Autowired private SchemaInitializer schemaInitializer;
+  @org.springframework.beans.factory.annotation.Autowired
+  private SchemaInitializer schemaInitializer;
 
   @Test
   void tablesExistAfterContextStartup() {
