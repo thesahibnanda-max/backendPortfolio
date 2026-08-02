@@ -16,3 +16,12 @@ server:
 groq:
   base-url: ${GROQ_BASE_URL:https://api.groq.com/openai/v1}
   api-keys: ${GROQ_API_KEYS:sample-api-key-1,sample-api-key-2}
+
+leetcode:
+  base-url: ${LEETCODE_BASE_URL:https://leetcode.com}
+
+codeforces:
+  base-url: ${CODEFORCES_BASE_URL:https://codeforces.com}
+
+github:
+  base-url: ${GITHUB_BASE_URL:https://api.github.com}

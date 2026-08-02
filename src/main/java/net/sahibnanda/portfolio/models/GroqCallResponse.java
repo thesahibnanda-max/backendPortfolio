@@ -6,8 +6,10 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import java.util.List;
 import lombok.Builder;
 import lombok.Data;
+import lombok.extern.jackson.Jacksonized;
 
 @Builder
+@Jacksonized
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -24,6 +26,7 @@ public class GroqCallResponse {
   private String serviceTier;
 
   @Builder
+  @Jacksonized
   @Data
   @JsonIgnoreProperties(ignoreUnknown = true)
   @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -36,6 +39,7 @@ public class GroqCallResponse {
   }
 
   @Builder
+  @Jacksonized
   @Data
   @JsonIgnoreProperties(ignoreUnknown = true)
   @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -46,6 +50,7 @@ public class GroqCallResponse {
   }
 
   @Builder
+  @Jacksonized
   @Data
   @JsonIgnoreProperties(ignoreUnknown = true)
   @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -56,6 +61,7 @@ public class GroqCallResponse {
   }
 
   @Builder
+  @Jacksonized
   @Data
   @JsonIgnoreProperties(ignoreUnknown = true)
   @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -70,6 +76,7 @@ public class GroqCallResponse {
   }
 
   @Builder
+  @Jacksonized
   @Data
   @JsonIgnoreProperties(ignoreUnknown = true)
   @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -80,6 +87,7 @@ public class GroqCallResponse {
   }
 
   @Builder
+  @Jacksonized
   @Data
   @JsonIgnoreProperties(ignoreUnknown = true)
   @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -90,6 +98,7 @@ public class GroqCallResponse {
   }
 
   @Builder
+  @Jacksonized
   @Data
   @JsonIgnoreProperties(ignoreUnknown = true)
   @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
