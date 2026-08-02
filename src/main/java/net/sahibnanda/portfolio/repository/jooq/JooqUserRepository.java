@@ -15,6 +15,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
 
 @Repository
+@SuppressWarnings("java:S8688")
 public class JooqUserRepository implements UserRepository {
 
   private final DSLContext dslContext;
