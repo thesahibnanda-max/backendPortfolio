@@ -113,18 +113,18 @@ Add after `spring-boot-starter-test`:
 
 <dependency>
     <groupId>org.testcontainers</groupId>
-    <artifactId>postgresql</artifactId>
+    <artifactId>testcontainers-postgresql</artifactId>
     <scope>test</scope>
 </dependency>
 
 <dependency>
     <groupId>org.testcontainers</groupId>
-    <artifactId>junit-jupiter</artifactId>
+    <artifactId>testcontainers-junit-jupiter</artifactId>
     <scope>test</scope>
 </dependency>
 ```
 
-None of these need explicit `<version>` — they're managed by the `spring-boot-starter-parent:4.0.0` BOM (confirmed: `spring.jooq.version` resolves to `3.19.28`, `testcontainers.version` resolves to `2.0.2` in this project).
+**Correction (found during Task 1 review):** Testcontainers 2.x renamed its per-module artifacts with a `testcontainers-` prefix — the old 1.x names (`org.testcontainers:postgresql`, `org.testcontainers:junit-jupiter`) are not present in this project's dependency management at all, which is why an earlier attempt with those names failed `mvn validate` even without an explicit version. The renamed artifacts (`testcontainers-postgresql`, `testcontainers-junit-jupiter`) ARE managed by the BOM (confirmed via `mvn help:effective-pom`, which lists them under `<dependencyManagement>` at version `2.0.2`) and still expose the same Java packages used elsewhere in this plan (`org.testcontainers.containers.PostgreSQLContainer`, `org.testcontainers.junit.jupiter.Testcontainers`/`Container` — confirmed present in the renamed jars), so no Java code in later tasks changes. None of the dependencies in this step need an explicit `<version>` — they're managed by the `spring-boot-starter-parent:4.0.0` BOM (confirmed: `spring.jooq.version` resolves to `3.19.28`, `testcontainers.version` resolves to `2.0.2` in this project).
 
 - [ ] **Step 3: Add the jOOQ code-generation plugin**
 
@@ -162,7 +162,13 @@ Add inside `<build><plugins>` in `pom.xml`, after the `spotless-maven-plugin` bl
                         <value>lower</value>
                     </property>
                 </properties>
-                <inputSchema>public</inputSchema>
+                <inputSchema>PUBLIC</inputSchema>
+                <forcedTypes>
+                    <forcedType>
+                        <name>JSONB</name>
+                        <includeExpression>chats\.messages</includeExpression>
+                    </forcedType>
+                </forcedTypes>
             </database>
             <target>
                 <packageName>net.sahibnanda.portfolio.jooq</packageName>
@@ -181,6 +187,10 @@ Add inside `<build><plugins>` in `pom.xml`, after the `spotless-maven-plugin` bl
 ```
 
 This reads `src/main/resources/db/schema.sql` (created in Task 2) at build time — no live database needed for codegen. The plugin automatically registers `target/generated-sources/jooq` as a compile source root.
+
+**Corrections (found while running codegen for real in Task 2):**
+1. `<inputSchema>` must be `PUBLIC` (uppercase), not `public`. `DDLDatabase` interprets the script against an internal H2-backed engine whose default schema is uppercase `PUBLIC`; a lowercase value silently matches nothing and generates zero files (confirmed: toggling case took generated file count from 0 to 9).
+2. Without a `forcedTypes` override, the interpreter maps a `JSONB` column to jOOQ's `org.jooq.JSON` Java type, not `org.jooq.JSONB` — Task 9's repository code needs the latter. The `forcedTypes` block above forces `chats.messages` specifically to jOOQ's `JSONB` type regardless of what the interpreter inferred. The real Postgres column is still genuinely `JSONB` at runtime; this only affects how jOOQ's codegen types the field in Java.
 
 - [ ] **Step 4: Verify the POM is valid**
 
@@ -299,12 +309,15 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-@Testcontainers
 @SpringBootTest
 public abstract class AbstractRepositoryIntegrationTest {
 
-  @Container @ServiceConnection
+  @ServiceConnection
   static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
+
+  static {
+    POSTGRES.start();
+  }
 
   @Autowired protected DSLContext dslContext;
 
@@ -316,7 +329,9 @@ public abstract class AbstractRepositoryIntegrationTest {
 }
 ```
 
-`@ServiceConnection` auto-wires `spring.datasource.*` to point at the container — no `@DynamicPropertySource` needed. `SchemaInitializer` (Task 6) runs automatically as part of Spring context startup, so tables already exist by the time `cleanDatabase()` runs. Child tables are deleted before parent tables to satisfy the `chats.username` foreign key.
+`@ServiceConnection` auto-wires `spring.datasource.*` to point at the container — no `@DynamicPropertySource` needed. `SchemaInitializer` (Task 7) runs automatically as part of Spring context startup, so tables already exist by the time `cleanDatabase()` runs. Child tables are deleted before parent tables to satisfy the `chats.username` foreign key.
+
+**Correction (found in Task 7, once a second subclass existed):** `@Testcontainers`/`@Container` gives each *subclass* its own JUnit `beforeAll`/`afterAll` container lifecycle — with only one subclass this looked fine, but once a second sibling class also extended this base, the shared `static` container field got stopped by the first class's `afterAll` and restarted (new container, new random port) for the second, while Spring's `ApplicationContext` cache kept serving the first class a stale `DataSource` bound to the dead port, causing `Connection refused`. Fixed by switching to Testcontainers' documented **singleton container pattern**: start the container once in a `static` initializer instead of via `@Container`, so it lives for the whole JVM/test-run and is only reaped by Testcontainers' Ryuk sidecar at the end. `@ServiceConnection` still works without `@Container` — Spring Boot scans for it independently of the JUnit Testcontainers extension.
 
 - [ ] **Step 2: Verify it compiles**
 
@@ -901,11 +916,40 @@ public class SchemaInitializer implements ApplicationRunner {
 Run: `mvn -q test -Dtest=SchemaInitializerTest`
 Expected: PASS, 2 tests green. (First run pulls the `postgres:16-alpine` Testcontainers image if not already cached — may take longer the first time.)
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Fix the pre-existing smoke test, which now requires a real datasource**
+
+Discovered while implementing this task: `BackendPortfolioApplicationTests` (pre-existing, from before this plan) is a bare `@SpringBootTest` with no Testcontainers wiring. Once `SchemaInitializer` exists, every Spring context startup — including this one — eagerly executes DDL against whatever `application.yml`'s datasource resolves to. That test will now fail (connection refused, or auth failure against an unrelated local Postgres) in any environment without a passwordless Postgres on `localhost:5432` matching the `postgres`/`postgres` defaults — including CI. This is a real regression caused by this task, not a pre-existing flake, so it must be fixed here rather than deferred.
+
+Fix: give it the same Testcontainers wiring as every other integration test, by having it extend `AbstractRepositoryIntegrationTest` instead of being a bare `@SpringBootTest`.
+
+Edit `src/test/java/net/sahibnanda/portfolio/BackendPortfolioApplicationTests.java`:
+
+```java
+package net.sahibnanda.portfolio;
+
+import net.sahibnanda.portfolio.repository.AbstractRepositoryIntegrationTest;
+import org.junit.jupiter.api.Test;
+
+class BackendPortfolioApplicationTests extends AbstractRepositoryIntegrationTest {
+
+  @Test
+  void contextLoads() {}
+}
+```
+
+(Drops the now-redundant `@SpringBootTest` import/annotation — `AbstractRepositoryIntegrationTest` already carries `@SpringBootTest` and `@Testcontainers`.)
+
+- [ ] **Step 6: Run the full suite to confirm the regression is gone**
+
+Run: `mvn -q test`
+Expected: exit code 0, all tests green (including `BackendPortfolioApplicationTests#contextLoads`), no more `PSQLException`/`Errors: 1`.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add src/main/java/net/sahibnanda/portfolio/repository/init/SchemaInitializer.java \
-        src/test/java/net/sahibnanda/portfolio/repository/init/SchemaInitializerTest.java
+        src/test/java/net/sahibnanda/portfolio/repository/init/SchemaInitializerTest.java \
+        src/test/java/net/sahibnanda/portfolio/BackendPortfolioApplicationTests.java
 git commit -m "feat: add idempotent schema initializer that runs on startup"
 ```
 
