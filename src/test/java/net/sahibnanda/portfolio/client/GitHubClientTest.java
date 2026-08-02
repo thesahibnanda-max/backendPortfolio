@@ -19,7 +19,8 @@ class GitHubClientTest {
 
   @BeforeAll
   static void setup() {
-    gitHubClient = new GitHubClient(new GitHubProperties("https://api.github.com"));
+    gitHubClient =
+        new GitHubClient(new GitHubProperties("https://api.github.com"));
   }
 
   @Test
@@ -35,7 +36,8 @@ class GitHubClientTest {
 
   @Test
   void listUserRepositories() {
-    List<GitHubRepository> repos = gitHubClient.listUserRepositories("octocat", 1);
+    List<GitHubRepository> repos =
+        gitHubClient.listUserRepositories("octocat", 1);
     System.out.println(repos);
 
     assertNotNull(repos);
@@ -45,8 +47,8 @@ class GitHubClientTest {
 
   @Test
   void listCommitsByAuthor() {
-    List<GitHubCommit> commits =
-        gitHubClient.listCommitsByAuthor("octocat", "Hello-World", "octocat", 1);
+    List<GitHubCommit> commits = gitHubClient.listCommitsByAuthor("octocat",
+        "Hello-World", "octocat", 1);
     System.out.println(commits);
 
     assertNotNull(commits);
@@ -55,9 +57,8 @@ class GitHubClientTest {
 
   @Test
   void getCommit() {
-    GitHubCommit commit =
-        gitHubClient.getCommit(
-            "octocat", "Hello-World", "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d");
+    GitHubCommit commit = gitHubClient.getCommit("octocat", "Hello-World",
+        "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d");
     System.out.println(commit);
 
     assertNotNull(commit);

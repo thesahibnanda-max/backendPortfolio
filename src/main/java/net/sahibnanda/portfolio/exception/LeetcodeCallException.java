@@ -1,12 +1,27 @@
 package net.sahibnanda.portfolio.exception;
 
-public class LeetcodeCallException extends RuntimeException {
+/**
+ * Thrown when a call to the LeetCode API fails.
+ */
+public final class LeetcodeCallException extends RuntimeException {
 
-  public LeetcodeCallException(String message) {
+  /**
+   * Constructs a new exception with the given detail message.
+   *
+   * @param message the detail message describing the failure
+   */
+  public LeetcodeCallException(final String message) {
     super(message);
   }
 
-  public LeetcodeCallException(String message, Throwable cause) {
+  /**
+   * Constructs a new exception with the given detail message and underlying
+   * cause.
+   *
+   * @param message the detail message describing the failure
+   * @param cause the underlying cause of the failure
+   */
+  public LeetcodeCallException(final String message, final Throwable cause) {
     super(message, cause);
   }
 }

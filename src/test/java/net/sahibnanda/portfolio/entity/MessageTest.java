@@ -11,11 +11,15 @@ class MessageTest {
 
   @Test
   void sortedByTimestampOrdersAscendingRegardlessOfInputOrder() {
-    Message earliest = new Message(Role.USER, "hi", Instant.parse("2026-08-02T12:00:00Z"));
-    Message middle = new Message(Role.ASSISTANT, "hello", Instant.parse("2026-08-02T12:00:05Z"));
-    Message latest = new Message(Role.USER, "bye", Instant.parse("2026-08-02T12:00:10Z"));
+    Message earliest =
+        new Message(Role.USER, "hi", Instant.parse("2026-08-02T12:00:00Z"));
+    Message middle = new Message(Role.ASSISTANT, "hello",
+        Instant.parse("2026-08-02T12:00:05Z"));
+    Message latest =
+        new Message(Role.USER, "bye", Instant.parse("2026-08-02T12:00:10Z"));
 
-    List<Message> sorted = Message.sortedByTimestamp(List.of(latest, earliest, middle));
+    List<Message> sorted =
+        Message.sortedByTimestamp(List.of(latest, earliest, middle));
 
     assertThat(sorted).containsExactly(earliest, middle, latest);
   }

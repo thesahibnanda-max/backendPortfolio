@@ -21,23 +21,49 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 import org.springframework.stereotype.Component;
 
+/**
+ * Thin client over the Leetcode GraphQL API used to fetch a user's public
+ * profile statistics.
+ */
 @Component
-public class LeetcodeClient {
+public final class LeetcodeClient {
 
+  /** Media type used for all Leetcode API request bodies. */
   private static final MediaType JSON = MediaType.get("application/json");
 
-  private static final OkHttpClient HTTP_CLIENT =
-      new OkHttpClient.Builder()
-          .connectTimeout(Duration.ofSeconds(10))
-          .readTimeout(Duration.ofSeconds(60))
-          .writeTimeout(Duration.ofSeconds(60))
-          .build();
+  /** Connect timeout, in seconds, for the shared HTTP client. */
+  private static final int CONNECT_TIMEOUT_SECONDS = 10;
 
+  /** Read timeout, in seconds, for the shared HTTP client. */
+  private static final int READ_TIMEOUT_SECONDS = 60;
+
+  /** Write timeout, in seconds, for the shared HTTP client. */
+  private static final int WRITE_TIMEOUT_SECONDS = 60;
+
+  /**
+   * Shared OkHttp client used for all requests, with fixed connect/read/write
+   * timeouts.
+   */
+  private static final OkHttpClient HTTP_CLIENT = new OkHttpClient.Builder()
+      .connectTimeout(Duration.ofSeconds(CONNECT_TIMEOUT_SECONDS))
+      .readTimeout(Duration.ofSeconds(READ_TIMEOUT_SECONDS))
+      .writeTimeout(Duration.ofSeconds(WRITE_TIMEOUT_SECONDS)).build();
+
+  /** Path segments identifying the GraphQL endpoint. */
   private static final String[] GRAPHQL_PATH = {"graphql"};
 
+  /** Fully resolved URL of the Leetcode GraphQL endpoint. */
   private final HttpUrl graphqlUrl;
 
-  public LeetcodeClient(LeetcodeProperties properties) {
+  /**
+   * Creates a client configured with the given Leetcode properties.
+   *
+   * @param properties Leetcode configuration; must not be {@code null}
+   * @throws IllegalStateException if the configured base URL is blank
+   * @throws NullPointerException if {@code properties} is {@code null} or its
+   *         base URL cannot be parsed
+   */
+  public LeetcodeClient(final LeetcodeProperties properties) {
 
     Objects.requireNonNull(properties, "leetcodeProperties must not be null");
 
@@ -46,8 +72,7 @@ public class LeetcodeClient {
     }
 
     HttpUrl baseUrl =
-        Objects.requireNonNull(
-            HttpUrl.parse(properties.baseUrl()),
+        Objects.requireNonNull(HttpUrl.parse(properties.baseUrl()),
             "Invalid Leetcode base URL: " + properties.baseUrl());
 
     HttpUrl.Builder urlBuilder = baseUrl.newBuilder();
@@ -58,7 +83,19 @@ public class LeetcodeClient {
     this.graphqlUrl = urlBuilder.build();
   }
 
-  public LeetcodeUserProfileResponse getUserProfileDetails(LeetcodeUserProfileRequest request) {
+  /**
+   * Fetches a Leetcode user's public profile statistics.
+   *
+   * @param request the profile lookup request, containing the username to look
+   *        up
+   * @return the user's profile statistics
+   * @throws IllegalArgumentException if {@code request} is {@code null} or its
+   *         username is blank
+   * @throws LeetcodeCallException if the Leetcode API call fails, or the API
+   *         response itself contains GraphQL errors
+   */
+  public LeetcodeUserProfileResponse getUserProfileDetails(
+      final LeetcodeUserProfileRequest request) {
     if (request == null) {
       throw new IllegalArgumentException("request is required.");
     }
@@ -67,9 +104,11 @@ public class LeetcodeClient {
       throw new IllegalArgumentException("username is required.");
     }
 
-    RequestBody requestBody = RequestBody.create(JsonUtils.toJson(request), JSON);
+    RequestBody requestBody =
+        RequestBody.create(JsonUtils.toJson(request), JSON);
 
-    Request httpRequest = new Request.Builder().url(graphqlUrl).post(requestBody).build();
+    Request httpRequest =
+        new Request.Builder().url(graphqlUrl).post(requestBody).build();
 
     try (Response response = HTTP_CLIENT.newCall(httpRequest).execute()) {
 
@@ -78,8 +117,8 @@ public class LeetcodeClient {
 
       if (!response.isSuccessful()) {
         throw new LeetcodeCallException(
-            String.format(
-                "Leetcode API request failed. HTTP %d: %s", response.code(), responseBody));
+            String.format("Leetcode API request failed. HTTP %d: %s",
+                response.code(), responseBody));
       }
 
       LeetcodeUserProfileResponse profileResponse =
@@ -87,11 +126,9 @@ public class LeetcodeClient {
 
       List<Map<String, Object>> errors = profileResponse.getErrors();
       if (errors != null && !errors.isEmpty()) {
-        throw new LeetcodeCallException(
-            "Leetcode API returned errors: "
-                + errors.stream()
-                    .map(error -> String.valueOf(error.get("message")))
-                    .collect(Collectors.joining("; ")));
+        throw new LeetcodeCallException("Leetcode API returned errors: "
+            + errors.stream().map(error -> String.valueOf(error.get("message")))
+                .collect(Collectors.joining("; ")));
       }
 
       return profileResponse;

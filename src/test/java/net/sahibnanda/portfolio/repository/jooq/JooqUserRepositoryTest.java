@@ -13,7 +13,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 class JooqUserRepositoryTest extends AbstractRepositoryIntegrationTest {
 
-  @Autowired private JooqUserRepository userRepository;
+  @Autowired
+  private JooqUserRepository userRepository;
 
   @Test
   void createPersistsUserWithCreationTimestamp() {
@@ -79,13 +80,15 @@ class JooqUserRepositoryTest extends AbstractRepositoryIntegrationTest {
 
     userRepository.updatePassword("alice", "new-hash");
 
-    assertThat(userRepository.findByUsername("alice").orElseThrow().passwordHash())
+    assertThat(
+        userRepository.findByUsername("alice").orElseThrow().passwordHash())
         .isEqualTo("new-hash");
   }
 
   @Test
   void updatePasswordThrowsWhenUserMissing() {
-    assertThatThrownBy(() -> userRepository.updatePassword("missing", "new-hash"))
+    assertThatThrownBy(
+        () -> userRepository.updatePassword("missing", "new-hash"))
         .isInstanceOf(UserNotFoundException.class);
   }
 }

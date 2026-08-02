@@ -17,32 +17,36 @@ class LeetcodeClientTest {
 
   @BeforeAll
   static void setup() {
-    leetcodeClient = new LeetcodeClient(new LeetcodeProperties("https://leetcode.com"));
+    leetcodeClient =
+        new LeetcodeClient(new LeetcodeProperties("https://leetcode.com"));
   }
 
   @Test
   void getUserProfileDetails() {
     LeetcodeUserProfileResponse resp =
-        leetcodeClient.getUserProfileDetails(
-            LeetcodeUserProfileRequest.builder("imsahibnanda").everything().build());
+        leetcodeClient.getUserProfileDetails(LeetcodeUserProfileRequest
+            .builder("imsahibnanda").everything().build());
     System.out.println(resp);
 
     assertNotNull(resp);
     assertNull(resp.getErrors());
     assertNotNull(resp.getData());
 
-    LeetcodeUserProfileResponse.MatchedUser matchedUser = resp.getData().getMatchedUser();
+    LeetcodeUserProfileResponse.MatchedUser matchedUser =
+        resp.getData().getMatchedUser();
     assertNotNull(matchedUser);
     assertEquals("imsahibnanda", matchedUser.getUsername());
 
     assertNotNull(matchedUser.getProfile());
     assertNotNull(matchedUser.getSubmitStatsGlobal());
     assertNotNull(matchedUser.getSubmitStatsGlobal().getAcSubmissionNum());
-    assertFalse(matchedUser.getSubmitStatsGlobal().getAcSubmissionNum().isEmpty());
+    assertFalse(
+        matchedUser.getSubmitStatsGlobal().getAcSubmissionNum().isEmpty());
 
     assertNotNull(matchedUser.getUserCalendar());
     assertNotNull(matchedUser.getUserCalendar().getSubmissionCalendar());
-    assertFalse(matchedUser.getUserCalendar().getSubmissionCalendar().isEmpty());
+    assertFalse(
+        matchedUser.getUserCalendar().getSubmissionCalendar().isEmpty());
 
     assertNotNull(resp.getData().getUserContestRanking());
     assertNotNull(resp.getData().getUserContestRankingHistory());

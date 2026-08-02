@@ -1,8 +1,17 @@
 package net.sahibnanda.portfolio.exception;
 
-public class DuplicateUsernameException extends RepositoryException {
+/**
+ * Thrown when an attempt is made to register a username that already exists in
+ * the repository.
+ */
+public final class DuplicateUsernameException extends RepositoryException {
 
-  public DuplicateUsernameException(String username) {
+  /**
+   * Constructs a new exception for a username that already exists.
+   *
+   * @param username the username that already exists
+   */
+  public DuplicateUsernameException(final String username) {
     super("Username already exists: " + username);
   }
 }

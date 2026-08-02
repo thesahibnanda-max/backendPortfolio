@@ -6,9 +6,17 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 @ConfigurationPropertiesScan
 @SpringBootApplication
-public class BackendPortfolioApplication {
+public final class BackendPortfolioApplication {
 
-  public static void main(String[] args) {
+  private BackendPortfolioApplication() {
+  }
+
+  /**
+   * Starts the Spring Boot application.
+   *
+   * @param args the command line arguments
+   */
+  public static void main(final String[] args) {
     SpringApplication.run(BackendPortfolioApplication.class, args);
   }
 }

@@ -8,10 +8,21 @@ import lombok.Value;
 @Value
 @Builder
 public class ChatEntity {
-  String chatId;
-  String username;
-  String chatTitle;
-  List<Message> messages;
-  LocalDateTime createdAt;
-  LocalDateTime updatedAt;
+  /** Unique identifier of the chat. */
+  private String chatId;
+
+  /** Username of the chat owner. */
+  private String username;
+
+  /** Display title of the chat. */
+  private String chatTitle;
+
+  /** Ordered messages belonging to the chat. */
+  private List<Message> messages;
+
+  /** Timestamp when the chat was created. */
+  private LocalDateTime createdAt;
+
+  /** Timestamp when the chat was last updated. */
+  private LocalDateTime updatedAt;
 }

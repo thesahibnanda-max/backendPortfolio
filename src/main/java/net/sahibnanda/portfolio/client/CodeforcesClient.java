@@ -15,22 +15,49 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 import org.springframework.stereotype.Component;
 
+/**
+ * Thin client over the Codeforces public API used to fetch a user's contest
+ * rating history.
+ */
 @Component
-public class CodeforcesClient {
+public final class CodeforcesClient {
 
-  private static final OkHttpClient HTTP_CLIENT =
-      new OkHttpClient.Builder()
-          .connectTimeout(Duration.ofSeconds(10))
-          .readTimeout(Duration.ofSeconds(60))
-          .writeTimeout(Duration.ofSeconds(60))
-          .build();
+  /** Connect timeout, in seconds, for the shared HTTP client. */
+  private static final int CONNECT_TIMEOUT_SECONDS = 10;
 
+  /** Read timeout, in seconds, for the shared HTTP client. */
+  private static final int READ_TIMEOUT_SECONDS = 60;
+
+  /** Write timeout, in seconds, for the shared HTTP client. */
+  private static final int WRITE_TIMEOUT_SECONDS = 60;
+
+  /**
+   * Shared OkHttp client used for all requests, with fixed connect/read/write
+   * timeouts.
+   */
+  private static final OkHttpClient HTTP_CLIENT = new OkHttpClient.Builder()
+      .connectTimeout(Duration.ofSeconds(CONNECT_TIMEOUT_SECONDS))
+      .readTimeout(Duration.ofSeconds(READ_TIMEOUT_SECONDS))
+      .writeTimeout(Duration.ofSeconds(WRITE_TIMEOUT_SECONDS)).build();
+
+  /** Path segments identifying the user rating endpoint. */
   private static final String[] USER_RATING_PATH = {"api", "user.rating"};
+
+  /** Status value indicating a successful Codeforces API response. */
   private static final String STATUS_OK = "OK";
 
+  /** Base URL of the Codeforces API, resolved from configuration. */
   private final HttpUrl baseUrl;
 
-  public CodeforcesClient(CodeforcesProperties properties) {
+  /**
+   * Creates a client configured with the given Codeforces properties.
+   *
+   * @param properties Codeforces configuration; must not be {@code null}
+   * @throws IllegalStateException if the configured base URL is blank
+   * @throws NullPointerException if {@code properties} is {@code null} or its
+   *         base URL cannot be parsed
+   */
+  public CodeforcesClient(final CodeforcesProperties properties) {
 
     Objects.requireNonNull(properties, "codeforcesProperties must not be null");
 
@@ -38,13 +65,21 @@ public class CodeforcesClient {
       throw new IllegalStateException("Codeforces base URL is not configured.");
     }
 
-    this.baseUrl =
-        Objects.requireNonNull(
-            HttpUrl.parse(properties.baseUrl()),
-            "Invalid Codeforces base URL: " + properties.baseUrl());
+    this.baseUrl = Objects.requireNonNull(HttpUrl.parse(properties.baseUrl()),
+        "Invalid Codeforces base URL: " + properties.baseUrl());
   }
 
-  public CodeforcesUserRatingResponse getUserRatingDetails(String username) {
+  /**
+   * Fetches a Codeforces user's contest rating history.
+   *
+   * @param username the Codeforces handle to look up
+   * @return the user's rating history
+   * @throws IllegalArgumentException if {@code username} is blank
+   * @throws CodeforcesCallException if the Codeforces API call fails, or the
+   *         API responds with a non-OK status
+   */
+  public CodeforcesUserRatingResponse getUserRatingDetails(
+      final String username) {
 
     if (StringUtils.isEmpty(username)) {
       throw new IllegalArgumentException("username is required.");
@@ -65,8 +100,8 @@ public class CodeforcesClient {
 
       if (!response.isSuccessful()) {
         throw new CodeforcesCallException(
-            String.format(
-                "Codeforces API request failed. HTTP %d: %s", response.code(), responseBody));
+            String.format("Codeforces API request failed. HTTP %d: %s",
+                response.code(), responseBody));
       }
 
       CodeforcesUserRatingResponse ratingResponse =
@@ -74,9 +109,9 @@ public class CodeforcesClient {
 
       if (!STATUS_OK.equals(ratingResponse.getStatus())) {
         throw new CodeforcesCallException(
-            ratingResponse.getComment() != null
-                ? ratingResponse.getComment()
-                : "Codeforces API returned a non-OK status: " + ratingResponse.getStatus());
+            ratingResponse.getComment() != null ? ratingResponse.getComment()
+                : "Codeforces API returned a non-OK status: "
+                    + ratingResponse.getStatus());
       }
 
       return ratingResponse;

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter
+    xmlns="https://github.com/spotbugs/filter/3.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://github.com/spotbugs/filter/3.0.0 https://raw.githubusercontent.com/spotbugs/spotbugs/master/spotbugs/etc/findbugsfilter.xsd">
+
+  <!--
+    jOOQ-generated code under net.sahibnanda.portfolio.jooq is regenerated
+    from schema.sql on every build (see the jooq-codegen-maven plugin in
+    pom.xml). It is not hand-written, is not checked into git, and any
+    manual fix here would simply be overwritten on the next build.
+  -->
+  <Match>
+    <Package name="net.sahibnanda.portfolio.jooq" />
+  </Match>
+  <Match>
+    <Package name="~net\.sahibnanda\.portfolio\.jooq\..*" />
+  </Match>
+
+  <!--
+    EI_EXPOSE_REP2 on a constructor-injected DSLContext field is a false
+    positive: DSLContext is a stateless Spring-managed service bean (like
+    injecting a RestTemplate or EntityManager), not mutable application
+    data. There is nothing meaningful to "defensively copy" here.
+  -->
+  <Match>
+    <Class name="net.sahibnanda.portfolio.repository.init.SchemaInitializer" />
+    <Field name="dslContext" />
+    <Bug pattern="EI_EXPOSE_REP2" />
+  </Match>
+  <Match>
+    <Class name="net.sahibnanda.portfolio.repository.jooq.JooqChatRepository" />
+    <Field name="dslContext" />
+    <Bug pattern="EI_EXPOSE_REP2" />
+  </Match>
+  <Match>
+    <Class name="net.sahibnanda.portfolio.repository.jooq.JooqUserRepository" />
+    <Field name="dslContext" />
+    <Bug pattern="EI_EXPOSE_REP2" />
+  </Match>
+
+</FindBugsFilter>

@@ -15,12 +15,14 @@ class CodeforcesClientTest {
 
   @BeforeAll
   static void setup() {
-    codeforcesClient = new CodeforcesClient(new CodeforcesProperties("https://codeforces.com"));
+    codeforcesClient = new CodeforcesClient(
+        new CodeforcesProperties("https://codeforces.com"));
   }
 
   @Test
   void getUserRatingDetails() {
-    CodeforcesUserRatingResponse resp = codeforcesClient.getUserRatingDetails("shisukenohara");
+    CodeforcesUserRatingResponse resp =
+        codeforcesClient.getUserRatingDetails("shisukenohara");
     System.out.println(resp);
 
     assertNotNull(resp);

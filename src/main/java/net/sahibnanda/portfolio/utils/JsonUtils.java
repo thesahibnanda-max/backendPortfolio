@@ -9,14 +9,22 @@ import java.io.UncheckedIOException;
 import lombok.experimental.UtilityClass;
 
 @UtilityClass
-public class JsonUtils {
+public final class JsonUtils {
 
+  /** Shared Jackson mapper configured for ISO-8601 dates. */
   private final ObjectMapper objectMapper =
-      new ObjectMapper()
-          .registerModule(new JavaTimeModule())
+      new ObjectMapper().registerModule(new JavaTimeModule())
           .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-  public <T> T fromJson(String json, Class<T> clazz) {
+  /**
+   * Deserializes the given JSON string into an instance of clazz.
+   *
+   * @param <T> the target type
+   * @param json the JSON string to parse
+   * @param clazz the target class
+   * @return the deserialized object
+   */
+  public <T> T fromJson(final String json, final Class<T> clazz) {
     try {
       return objectMapper.readValue(json, clazz);
     } catch (JsonProcessingException e) {
@@ -24,7 +32,16 @@ public class JsonUtils {
     }
   }
 
-  public <T> T fromJson(String json, TypeReference<T> typeReference) {
+  /**
+   * Deserializes the given JSON string using a type reference.
+   *
+   * @param <T> the target type
+   * @param json the JSON string to parse
+   * @param typeReference the target type reference
+   * @return the deserialized object
+   */
+  public <T> T fromJson(final String json,
+      final TypeReference<T> typeReference) {
     try {
       return objectMapper.readValue(json, typeReference);
     } catch (JsonProcessingException e) {
@@ -32,7 +49,13 @@ public class JsonUtils {
     }
   }
 
-  public String toJson(Object value) {
+  /**
+   * Serializes the given object into its JSON string form.
+   *
+   * @param value the object to serialize
+   * @return the JSON string representation
+   */
+  public String toJson(final Object value) {
     try {
       return objectMapper.writeValueAsString(value);
     } catch (JsonProcessingException e) {

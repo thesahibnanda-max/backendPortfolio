@@ -22,7 +22,9 @@ class SchemaInitializerTest extends AbstractRepositoryIntegrationTest {
 
   @Test
   void runningInitializerAgainIsIdempotent() {
-    assertThatCode(() -> schemaInitializer.run(null)).doesNotThrowAnyException();
-    assertThatCode(() -> schemaInitializer.run(null)).doesNotThrowAnyException();
+    assertThatCode(() -> schemaInitializer.run(null))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> schemaInitializer.run(null))
+        .doesNotThrowAnyException();
   }
 }

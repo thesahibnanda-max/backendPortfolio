@@ -7,7 +7,8 @@ import org.junit.jupiter.api.Test;
 
 class JsonUtilsTest {
 
-  private record InstantHolder(Instant timestamp) {}
+  private record InstantHolder(Instant timestamp) {
+  }
 
   @Test
   void roundTripsInstantAsIso8601() {

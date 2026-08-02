@@ -134,9 +134,9 @@
                 <version>3.9.0</version>
                 <configuration>
                     <java>
-                        <googleJavaFormat>
-                            <version>1.36.1</version>
-                        </googleJavaFormat>
+                        <eclipse>
+                            <file>eclipse-java-style.xml</file>
+                        </eclipse>
                     </java>
                 </configuration>
             </plugin>
@@ -193,6 +193,15 @@
                         <version>3.19.28</version>
                     </dependency>
                 </dependencies>
+            </plugin>
+
+            <plugin>
+                <groupId>com.github.spotbugs</groupId>
+                <artifactId>spotbugs-maven-plugin</artifactId>
+                <version>4.10.3.0</version>
+                <configuration>
+                    <excludeFilterFile>spotbugs-exclude.xml</excludeFilterFile>
+                </configuration>
             </plugin>
         </plugins>
     </build>

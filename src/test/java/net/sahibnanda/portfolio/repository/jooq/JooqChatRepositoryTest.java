@@ -19,8 +19,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 class JooqChatRepositoryTest extends AbstractRepositoryIntegrationTest {
 
-  @Autowired private JooqChatRepository chatRepository;
-  @Autowired private UserRepository userRepository;
+  @Autowired
+  private JooqChatRepository chatRepository;
+  @Autowired
+  private UserRepository userRepository;
 
   @BeforeEach
   void createOwningUser() {
@@ -30,10 +32,13 @@ class JooqChatRepositoryTest extends AbstractRepositoryIntegrationTest {
   @Test
   void createPersistsChatWithMessagesSortedByTimestamp() {
     String chatId = StringUtils.generateUlid();
-    Message later = new Message(Role.ASSISTANT, "hi back", Instant.parse("2026-08-02T12:00:05Z"));
-    Message earlier = new Message(Role.USER, "hi", Instant.parse("2026-08-02T12:00:00Z"));
+    Message later = new Message(Role.ASSISTANT, "hi back",
+        Instant.parse("2026-08-02T12:00:05Z"));
+    Message earlier =
+        new Message(Role.USER, "hi", Instant.parse("2026-08-02T12:00:00Z"));
 
-    ChatEntity created = chatRepository.create(chatId, "alice", "Chat 1", List.of(later, earlier));
+    ChatEntity created = chatRepository.create(chatId, "alice", "Chat 1",
+        List.of(later, earlier));
 
     assertThat(created.getChatId()).isEqualTo(chatId);
     assertThat(created.getMessages()).containsExactly(earlier, later);
@@ -41,13 +46,15 @@ class JooqChatRepositoryTest extends AbstractRepositoryIntegrationTest {
 
   @Test
   void createRejectsNonUlidChatId() {
-    assertThatThrownBy(() -> chatRepository.create("not-a-ulid", "alice", "Chat 1", List.of()))
+    assertThatThrownBy(
+        () -> chatRepository.create("not-a-ulid", "alice", "Chat 1", List.of()))
         .isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test
   void findByChatIdReturnsEmptyWhenAbsent() {
-    Optional<ChatEntity> found = chatRepository.findByChatId(StringUtils.generateUlid());
+    Optional<ChatEntity> found =
+        chatRepository.findByChatId(StringUtils.generateUlid());
 
     assertThat(found).isEmpty();
   }
@@ -61,15 +68,18 @@ class JooqChatRepositoryTest extends AbstractRepositoryIntegrationTest {
 
     List<ChatEntity> chats = chatRepository.findChats("alice");
 
-    assertThat(chats).extracting(ChatEntity::getChatId).containsExactly(secondChatId, firstChatId);
+    assertThat(chats).extracting(ChatEntity::getChatId)
+        .containsExactly(secondChatId, firstChatId);
   }
 
   @Test
   void saveMessagesReplacesAndSortsMessages() {
     String chatId = StringUtils.generateUlid();
     chatRepository.create(chatId, "alice", "Chat 1", List.of());
-    Message later = new Message(Role.ASSISTANT, "hi back", Instant.parse("2026-08-02T12:00:05Z"));
-    Message earlier = new Message(Role.USER, "hi", Instant.parse("2026-08-02T12:00:00Z"));
+    Message later = new Message(Role.ASSISTANT, "hi back",
+        Instant.parse("2026-08-02T12:00:05Z"));
+    Message earlier =
+        new Message(Role.USER, "hi", Instant.parse("2026-08-02T12:00:00Z"));
 
     chatRepository.saveMessages(chatId, List.of(later, earlier));
 
@@ -79,7 +89,8 @@ class JooqChatRepositoryTest extends AbstractRepositoryIntegrationTest {
 
   @Test
   void saveMessagesThrowsWhenChatMissing() {
-    assertThatThrownBy(() -> chatRepository.saveMessages(StringUtils.generateUlid(), List.of()))
+    assertThatThrownBy(() -> chatRepository
+        .saveMessages(StringUtils.generateUlid(), List.of()))
         .isInstanceOf(ChatNotFoundException.class);
   }
 
@@ -112,7 +123,8 @@ class JooqChatRepositoryTest extends AbstractRepositoryIntegrationTest {
 
   @Test
   void updateChatTitleThrowsWhenChatMissing() {
-    assertThatThrownBy(() -> chatRepository.updateChatTitle(StringUtils.generateUlid(), "Renamed"))
+    assertThatThrownBy(() -> chatRepository
+        .updateChatTitle(StringUtils.generateUlid(), "Renamed"))
         .isInstanceOf(ChatNotFoundException.class);
   }
 

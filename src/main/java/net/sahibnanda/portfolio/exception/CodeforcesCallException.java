@@ -1,12 +1,27 @@
 package net.sahibnanda.portfolio.exception;
 
-public class CodeforcesCallException extends RuntimeException {
+/**
+ * Thrown when a call to the Codeforces API fails.
+ */
+public final class CodeforcesCallException extends RuntimeException {
 
-  public CodeforcesCallException(String message) {
+  /**
+   * Constructs a new exception with the given detail message.
+   *
+   * @param message the detail message describing the failure
+   */
+  public CodeforcesCallException(final String message) {
     super(message);
   }
 
-  public CodeforcesCallException(String message, Throwable cause) {
+  /**
+   * Constructs a new exception with the given detail message and underlying
+   * cause.
+   *
+   * @param message the detail message describing the failure
+   * @param cause the underlying cause of the failure
+   */
+  public CodeforcesCallException(final String message, final Throwable cause) {
     super(message, cause);
   }
 }

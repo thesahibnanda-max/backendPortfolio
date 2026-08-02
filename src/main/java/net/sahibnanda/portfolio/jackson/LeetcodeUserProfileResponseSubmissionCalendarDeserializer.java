@@ -11,12 +11,13 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import net.sahibnanda.portfolio.utils.JsonUtils;
 
-public class LeetcodeUserProfileResponseSubmissionCalendarDeserializer
+public final class LeetcodeUserProfileResponseSubmissionCalendarDeserializer
     extends JsonDeserializer<Map<Long, Integer>> {
 
+  /** Deserializes the submission calendar JSON into a long-keyed map. */
   @Override
-  public Map<Long, Integer> deserialize(JsonParser parser, DeserializationContext context)
-      throws IOException {
+  public Map<Long, Integer> deserialize(final JsonParser parser,
+      final DeserializationContext context) throws IOException {
 
     String json = parser.getValueAsString();
 
@@ -25,12 +26,11 @@ public class LeetcodeUserProfileResponseSubmissionCalendarDeserializer
     }
 
     Map<String, Integer> stringKeyMap =
-        JsonUtils.fromJson(json, new TypeReference<HashMap<String, Integer>>() {});
+        JsonUtils.fromJson(json, new TypeReference<HashMap<String, Integer>>() {
+        });
 
-    return stringKeyMap.entrySet().stream()
-        .collect(
-            Collectors.toMap(
-                entry -> entry.getKey() == null ? 0L : Long.valueOf(entry.getKey()),
-                entry -> Objects.requireNonNullElse(entry.getValue(), 0)));
+    return stringKeyMap.entrySet().stream().collect(Collectors.toMap(
+        entry -> entry.getKey() == null ? 0L : Long.parseLong(entry.getKey()),
+        entry -> Objects.requireNonNullElse(entry.getValue(), 0)));
   }
 }
