@@ -1,5 +1,7 @@
 package net.sahibnanda.portfolio.utils;
 
+import com.github.f4b6a3.ulid.Ulid;
+import com.github.f4b6a3.ulid.UlidCreator;
 import lombok.experimental.UtilityClass;
 
 @UtilityClass
@@ -17,5 +19,21 @@ public class StringUtils {
       return false;
     }
     return a.equalsIgnoreCase(b);
+  }
+
+  public String generateUlid() {
+    return UlidCreator.getUlid().toString();
+  }
+
+  public boolean isValidUlid(String value) {
+    if (isEmpty(value)) {
+      return false;
+    }
+    try {
+      Ulid.from(value);
+      return true;
+    } catch (IllegalArgumentException e) {
+      return false;
+    }
   }
 }
