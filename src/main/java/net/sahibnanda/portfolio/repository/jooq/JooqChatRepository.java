@@ -1,0 +1,157 @@
+package net.sahibnanda.portfolio.repository.jooq;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+import net.sahibnanda.portfolio.entity.ChatEntity;
+import net.sahibnanda.portfolio.entity.Message;
+import net.sahibnanda.portfolio.exception.ChatNotFoundException;
+import net.sahibnanda.portfolio.exception.DatabaseOperationException;
+import net.sahibnanda.portfolio.jooq.Tables;
+import net.sahibnanda.portfolio.jooq.tables.records.ChatsRecord;
+import net.sahibnanda.portfolio.repository.ChatRepository;
+import net.sahibnanda.portfolio.utils.JsonUtils;
+import net.sahibnanda.portfolio.utils.StringUtils;
+import org.jooq.DSLContext;
+import org.jooq.JSONB;
+import org.springframework.dao.DataAccessException;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public class JooqChatRepository implements ChatRepository {
+
+  private final DSLContext dslContext;
+
+  public JooqChatRepository(DSLContext dslContext) {
+    this.dslContext = dslContext;
+  }
+
+  @Override
+  public ChatEntity create(
+      String chatId, String username, String chatTitle, List<Message> messages) {
+    if (!StringUtils.isValidUlid(chatId)) {
+      throw new IllegalArgumentException("chatId is not a valid ULID: " + chatId);
+    }
+    LocalDateTime now = LocalDateTime.now();
+    List<Message> sortedMessages = Message.sortedByTimestamp(messages);
+    try {
+      dslContext
+          .insertInto(Tables.CHATS)
+          .set(Tables.CHATS.CHAT_ID, chatId)
+          .set(Tables.CHATS.USERNAME, username)
+          .set(Tables.CHATS.CHAT_TITLE, chatTitle)
+          .set(Tables.CHATS.MESSAGES, serializeMessages(sortedMessages))
+          .set(Tables.CHATS.CREATED_AT, now)
+          .set(Tables.CHATS.UPDATED_AT, now)
+          .execute();
+    } catch (DataAccessException e) {
+      throw new DatabaseOperationException("Failed to create chat: " + chatId, e);
+    }
+    return ChatEntity.builder()
+        .chatId(chatId)
+        .username(username)
+        .chatTitle(chatTitle)
+        .messages(sortedMessages)
+        .createdAt(now)
+        .updatedAt(now)
+        .build();
+  }
+
+  @Override
+  public Optional<ChatEntity> findByChatId(String chatId) {
+    try {
+      return dslContext
+          .selectFrom(Tables.CHATS)
+          .where(Tables.CHATS.CHAT_ID.eq(chatId))
+          .fetchOptional(this::toEntity);
+    } catch (DataAccessException e) {
+      throw new DatabaseOperationException("Failed to find chat: " + chatId, e);
+    }
+  }
+
+  @Override
+  public List<ChatEntity> findChats(String username) {
+    try {
+      return dslContext
+          .selectFrom(Tables.CHATS)
+          .where(Tables.CHATS.USERNAME.eq(username))
+          .orderBy(Tables.CHATS.CREATED_AT.desc())
+          .fetch(this::toEntity);
+    } catch (DataAccessException e) {
+      throw new DatabaseOperationException("Failed to find chats for user: " + username, e);
+    }
+  }
+
+  @Override
+  public void saveMessages(String chatId, List<Message> messages) {
+    List<Message> sortedMessages = Message.sortedByTimestamp(messages);
+    int updated;
+    try {
+      updated =
+          dslContext
+              .update(Tables.CHATS)
+              .set(Tables.CHATS.MESSAGES, serializeMessages(sortedMessages))
+              .set(Tables.CHATS.UPDATED_AT, LocalDateTime.now())
+              .where(Tables.CHATS.CHAT_ID.eq(chatId))
+              .execute();
+    } catch (DataAccessException e) {
+      throw new DatabaseOperationException("Failed to save messages for chat: " + chatId, e);
+    }
+    if (updated == 0) {
+      throw new ChatNotFoundException(chatId);
+    }
+  }
+
+  @Override
+  public void delete(String chatId) {
+    int deleted;
+    try {
+      deleted =
+          dslContext.deleteFrom(Tables.CHATS).where(Tables.CHATS.CHAT_ID.eq(chatId)).execute();
+    } catch (DataAccessException e) {
+      throw new DatabaseOperationException("Failed to delete chat: " + chatId, e);
+    }
+    if (deleted == 0) {
+      throw new ChatNotFoundException(chatId);
+    }
+  }
+
+  @Override
+  public void updateChatTitle(String chatId, String title) {
+    int updated;
+    try {
+      updated =
+          dslContext
+              .update(Tables.CHATS)
+              .set(Tables.CHATS.CHAT_TITLE, title)
+              .set(Tables.CHATS.UPDATED_AT, LocalDateTime.now())
+              .where(Tables.CHATS.CHAT_ID.eq(chatId))
+              .execute();
+    } catch (DataAccessException e) {
+      throw new DatabaseOperationException("Failed to update title for chat: " + chatId, e);
+    }
+    if (updated == 0) {
+      throw new ChatNotFoundException(chatId);
+    }
+  }
+
+  private ChatEntity toEntity(ChatsRecord record) {
+    return ChatEntity.builder()
+        .chatId(record.getChatId())
+        .username(record.getUsername())
+        .chatTitle(record.getChatTitle())
+        .messages(Message.sortedByTimestamp(deserializeMessages(record.getMessages())))
+        .createdAt(record.getCreatedAt())
+        .updatedAt(record.getUpdatedAt())
+        .build();
+  }
+
+  private JSONB serializeMessages(List<Message> messages) {
+    return JSONB.jsonb(JsonUtils.toJson(messages));
+  }
+
+  private List<Message> deserializeMessages(JSONB jsonb) {
+    return JsonUtils.fromJson(jsonb.data(), new TypeReference<List<Message>>() {});
+  }
+}
