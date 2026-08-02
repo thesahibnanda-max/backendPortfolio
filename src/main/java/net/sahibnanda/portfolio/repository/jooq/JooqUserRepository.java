@@ -35,9 +35,7 @@ public class JooqUserRepository implements UserRepository {
           .execute();
     } catch (DuplicateKeyException e) {
       throw new DuplicateUsernameException(username);
-    } catch (org.jooq.exception.DataAccessException e) {
-      throw new DatabaseOperationException("Failed to create user: " + username, e);
-    } catch (DataAccessException e) {
+    } catch (org.jooq.exception.DataAccessException | DataAccessException e) {
       throw new DatabaseOperationException("Failed to create user: " + username, e);
     }
     return new UserEntity(username, hashedPassword, createdAt);
@@ -50,9 +48,7 @@ public class JooqUserRepository implements UserRepository {
           .selectFrom(Tables.USERS)
           .where(Tables.USERS.USERNAME.eq(username))
           .fetchOptional(this::toEntity);
-    } catch (org.jooq.exception.DataAccessException e) {
-      throw new DatabaseOperationException("Failed to find user: " + username, e);
-    } catch (DataAccessException e) {
+    } catch (org.jooq.exception.DataAccessException | DataAccessException e) {
       throw new DatabaseOperationException("Failed to find user: " + username, e);
     }
   }
@@ -62,9 +58,7 @@ public class JooqUserRepository implements UserRepository {
     try {
       return dslContext.fetchExists(
           dslContext.selectFrom(Tables.USERS).where(Tables.USERS.USERNAME.eq(username)));
-    } catch (org.jooq.exception.DataAccessException e) {
-      throw new DatabaseOperationException("Failed to check user existence: " + username, e);
-    } catch (DataAccessException e) {
+    } catch (org.jooq.exception.DataAccessException | DataAccessException e) {
       throw new DatabaseOperationException("Failed to check user existence: " + username, e);
     }
   }
@@ -75,9 +69,7 @@ public class JooqUserRepository implements UserRepository {
     try {
       deleted =
           dslContext.deleteFrom(Tables.USERS).where(Tables.USERS.USERNAME.eq(username)).execute();
-    } catch (org.jooq.exception.DataAccessException e) {
-      throw new DatabaseOperationException("Failed to delete user: " + username, e);
-    } catch (DataAccessException e) {
+    } catch (org.jooq.exception.DataAccessException | DataAccessException e) {
       throw new DatabaseOperationException("Failed to delete user: " + username, e);
     }
     if (deleted == 0) {
@@ -95,9 +87,7 @@ public class JooqUserRepository implements UserRepository {
               .set(Tables.USERS.PASSWORD_HASH, hashedPassword)
               .where(Tables.USERS.USERNAME.eq(username))
               .execute();
-    } catch (org.jooq.exception.DataAccessException e) {
-      throw new DatabaseOperationException("Failed to update password for user: " + username, e);
-    } catch (DataAccessException e) {
+    } catch (org.jooq.exception.DataAccessException | DataAccessException e) {
       throw new DatabaseOperationException("Failed to update password for user: " + username, e);
     }
     if (updated == 0) {
