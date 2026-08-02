@@ -45,6 +45,8 @@ public class JooqChatRepository implements ChatRepository {
           .set(Tables.CHATS.CREATED_AT, now)
           .set(Tables.CHATS.UPDATED_AT, now)
           .execute();
+    } catch (org.jooq.exception.DataAccessException e) {
+      throw new DatabaseOperationException("Failed to create chat: " + chatId, e);
     } catch (DataAccessException e) {
       throw new DatabaseOperationException("Failed to create chat: " + chatId, e);
     }
@@ -65,6 +67,8 @@ public class JooqChatRepository implements ChatRepository {
           .selectFrom(Tables.CHATS)
           .where(Tables.CHATS.CHAT_ID.eq(chatId))
           .fetchOptional(this::toEntity);
+    } catch (org.jooq.exception.DataAccessException e) {
+      throw new DatabaseOperationException("Failed to find chat: " + chatId, e);
     } catch (DataAccessException e) {
       throw new DatabaseOperationException("Failed to find chat: " + chatId, e);
     }
@@ -76,8 +80,10 @@ public class JooqChatRepository implements ChatRepository {
       return dslContext
           .selectFrom(Tables.CHATS)
           .where(Tables.CHATS.USERNAME.eq(username))
-          .orderBy(Tables.CHATS.CREATED_AT.desc())
+          .orderBy(Tables.CHATS.CREATED_AT.desc(), Tables.CHATS.CHAT_ID.desc())
           .fetch(this::toEntity);
+    } catch (org.jooq.exception.DataAccessException e) {
+      throw new DatabaseOperationException("Failed to find chats for user: " + username, e);
     } catch (DataAccessException e) {
       throw new DatabaseOperationException("Failed to find chats for user: " + username, e);
     }
@@ -95,6 +101,8 @@ public class JooqChatRepository implements ChatRepository {
               .set(Tables.CHATS.UPDATED_AT, LocalDateTime.now())
               .where(Tables.CHATS.CHAT_ID.eq(chatId))
               .execute();
+    } catch (org.jooq.exception.DataAccessException e) {
+      throw new DatabaseOperationException("Failed to save messages for chat: " + chatId, e);
     } catch (DataAccessException e) {
       throw new DatabaseOperationException("Failed to save messages for chat: " + chatId, e);
     }
@@ -109,6 +117,8 @@ public class JooqChatRepository implements ChatRepository {
     try {
       deleted =
           dslContext.deleteFrom(Tables.CHATS).where(Tables.CHATS.CHAT_ID.eq(chatId)).execute();
+    } catch (org.jooq.exception.DataAccessException e) {
+      throw new DatabaseOperationException("Failed to delete chat: " + chatId, e);
     } catch (DataAccessException e) {
       throw new DatabaseOperationException("Failed to delete chat: " + chatId, e);
     }
@@ -128,6 +138,8 @@ public class JooqChatRepository implements ChatRepository {
               .set(Tables.CHATS.UPDATED_AT, LocalDateTime.now())
               .where(Tables.CHATS.CHAT_ID.eq(chatId))
               .execute();
+    } catch (org.jooq.exception.DataAccessException e) {
+      throw new DatabaseOperationException("Failed to update title for chat: " + chatId, e);
     } catch (DataAccessException e) {
       throw new DatabaseOperationException("Failed to update title for chat: " + chatId, e);
     }
@@ -152,6 +164,10 @@ public class JooqChatRepository implements ChatRepository {
   }
 
   private List<Message> deserializeMessages(JSONB jsonb) {
-    return JsonUtils.fromJson(jsonb.data(), new TypeReference<List<Message>>() {});
+    try {
+      return JsonUtils.fromJson(jsonb.data(), new TypeReference<List<Message>>() {});
+    } catch (RuntimeException e) {
+      throw new DatabaseOperationException("Failed to deserialize chat messages", e);
+    }
   }
 }
