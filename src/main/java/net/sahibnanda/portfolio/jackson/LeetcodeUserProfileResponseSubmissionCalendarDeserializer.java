@@ -32,8 +32,8 @@ public final class LeetcodeUserProfileResponseSubmissionCalendarDeserializer
         JsonUtils.fromJson(json, new TypeReference<HashMap<String, Integer>>() {
         });
 
-    return stringKeyMap.entrySet().stream().collect(Collectors.toMap(
-        entry -> NumberUtils.toLong(entry.getKey(),0L),
-        entry -> Objects.requireNonNullElse(entry.getValue(), 0)));
+    return stringKeyMap.entrySet().stream().collect(
+        Collectors.toMap(entry -> NumberUtils.toLong(entry.getKey(), 0L),
+            entry -> Objects.requireNonNullElse(entry.getValue(), 0)));
   }
 }
