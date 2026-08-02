@@ -34,7 +34,7 @@ public class JooqUserRepository implements UserRepository {
           .set(Tables.USERS.PASSWORD_HASH, hashedPassword)
           .set(Tables.USERS.CREATED_AT, createdAt)
           .execute();
-    } catch (DuplicateKeyException e) {
+    } catch (DuplicateKeyException _) {
       throw new DuplicateUsernameException(username);
     } catch (org.jooq.exception.DataAccessException | DataAccessException e) {
       throw new DatabaseOperationException("Failed to create user: " + username, e);
