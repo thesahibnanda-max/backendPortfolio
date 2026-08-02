@@ -19,7 +19,9 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Repository;
 
 @Repository
-@SuppressWarnings("java:S8688") // Suppress Sonar warning for LocalDateTime.now() usage, as it is used for timestamping purposes which is acceptable in this context.
+@SuppressWarnings(
+    "java:S8688") // Suppress Sonar warning for LocalDateTime.now() usage, as it is used for
+// timestamping purposes which is acceptable in this context.
 public class JooqChatRepository implements ChatRepository {
 
   private final DSLContext dslContext;
