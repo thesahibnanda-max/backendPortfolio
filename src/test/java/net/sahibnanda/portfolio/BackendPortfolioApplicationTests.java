@@ -1,10 +1,9 @@
 package net.sahibnanda.portfolio;
 
+import net.sahibnanda.portfolio.repository.AbstractRepositoryIntegrationTest;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
-class BackendPortfolioApplicationTests {
+class BackendPortfolioApplicationTests extends AbstractRepositoryIntegrationTest {
 
   @Test
   void contextLoads() {}
