@@ -166,7 +166,7 @@
                                     <value>lower</value>
                                 </property>
                             </properties>
-                            <inputSchema>public</inputSchema>
+                            <inputSchema>PUBLIC</inputSchema>
                         </database>
                         <target>
                             <packageName>net.sahibnanda.portfolio.jooq</packageName>
