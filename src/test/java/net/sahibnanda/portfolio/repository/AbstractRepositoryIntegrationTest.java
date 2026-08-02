@@ -1,11 +1,19 @@
 package net.sahibnanda.portfolio.repository;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import net.sahibnanda.portfolio.jooq.Tables;
 import org.jooq.DSLContext;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.util.StreamUtils;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 @SpringBootTest
@@ -41,8 +49,30 @@ public abstract class AbstractRepositoryIntegrationTest {
   protected DSLContext dslContext;
 
   @BeforeEach
+  @AfterEach
   void cleanDatabase() {
     dslContext.deleteFrom(Tables.CHATS).execute();
     dslContext.deleteFrom(Tables.USERS).execute();
+  }
+
+  /**
+   * Executes a SQL script from the classpath against the test database,
+   * mirroring how
+   * {@link net.sahibnanda.portfolio.repository.init.SchemaInitializer} applies
+   * {@code schema.sql}. Call from a subclass {@code @BeforeEach} so it runs
+   * after {@link #cleanDatabase()}.
+   *
+   * @param classpathLocation classpath-relative path to the SQL script
+   */
+  protected void loadFixtureScript(final String classpathLocation) {
+    Resource resource = new ClassPathResource(classpathLocation);
+    try (InputStream inputStream = resource.getInputStream()) {
+      String script =
+          StreamUtils.copyToString(inputStream, StandardCharsets.UTF_8);
+      dslContext.parser().parse(script).executeBatch();
+    } catch (IOException e) {
+      throw new UncheckedIOException(
+          "Failed to load fixture script: " + classpathLocation, e);
+    }
   }
 }
