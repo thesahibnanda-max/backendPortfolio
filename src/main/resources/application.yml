@@ -25,3 +25,6 @@ codeforces:
 
 github:
   base-url: ${GITHUB_BASE_URL:https://api.github.com}
+
+profile:
+  profile-json-retreival-url: ${PROFILE_JSON_RETREIVAL_URL:https://zaiwjonzbotyjmoghqzh.supabase.co/storage/v1/object/public/portfolio/profile.json}
