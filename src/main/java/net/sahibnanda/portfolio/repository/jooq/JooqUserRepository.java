@@ -96,7 +96,8 @@ public class JooqUserRepository implements UserRepository {
     }
   }
 
-  private UserEntity toEntity(UsersRecord record) {
-    return new UserEntity(record.getUsername(), record.getPasswordHash(), record.getCreatedAt());
+  private UserEntity toEntity(UsersRecord userRecord) {
+    return new UserEntity(
+        userRecord.getUsername(), userRecord.getPasswordHash(), userRecord.getCreatedAt());
   }
 }
