@@ -45,3 +45,15 @@ details:
   leetcode-user-names: ${DETAILS_LEETCODE_USERNAMES:imsahibnanda}
   codeforces-user-names: ${DETAILS_CODEFORCES_USERNAMES:shisukenohara}
   github-user-names: ${DETAILS_GITHUB_USERNAMES:thesahibnanda-max,thesahibnanda}
+
+llm:
+  model-weights:
+    LLAMA_3_3_70B: 50
+    GPT_OSS_20B: 20
+    QWEN_3_6_27B: 20
+    GPT_OSS_120B: 10
+  min-temperature: 0.8
+  max-temperature: 1.4
+  min-top-p: 0.9
+  max-top-p: 1.0
+  max-completion-tokens: 1024

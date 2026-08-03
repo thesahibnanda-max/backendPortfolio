@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.io.UncheckedIOException;
+import java.util.Optional;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
@@ -50,6 +51,25 @@ public final class JsonUtils {
     } catch (JsonProcessingException e) {
       log.error("Failed to deserialize JSON into {}", typeReference, e);
       throw new UncheckedIOException("Failed to deserialize JSON", e);
+    }
+  }
+
+  /**
+   * Attempts to deserialize the given JSON string into an instance of clazz,
+   * returning empty instead of throwing or logging on failure -- for callers
+   * that try multiple candidate strings and only care about the first one that
+   * parses (e.g. {@link JsonExtractionUtils}).
+   *
+   * @param <T> the target type
+   * @param json the JSON string to parse
+   * @param clazz the target class
+   * @return the deserialized object, or empty if it could not be parsed
+   */
+  public <T> Optional<T> tryFromJson(final String json, final Class<T> clazz) {
+    try {
+      return Optional.ofNullable(objectMapper.readValue(json, clazz));
+    } catch (JsonProcessingException | RuntimeException e) {
+      return Optional.empty();
     }
   }
 
