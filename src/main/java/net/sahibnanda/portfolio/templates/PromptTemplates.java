@@ -24,12 +24,14 @@ public final class PromptTemplates {
    * Renders the Orchestrator AI's system prompt, listing every
    * {@link ContextType} and its description.
    *
+   * @param name the portfolio owner's name, or an empty string if unavailable
    * @return the rendered system prompt
    */
-  public String getSystemPromptForOrchestratorAI() {
+  public String getSystemPromptForOrchestratorAI(final String name) {
     StringOutput output = new StringOutput();
     templateEngine.render("orchestrator-system.jte",
-        Map.of("contextTypes", List.of(ContextType.values())), output);
+        Map.of("contextTypes", List.of(ContextType.values()), "name", name),
+        output);
     return output.toString();
   }
 
@@ -52,11 +54,12 @@ public final class PromptTemplates {
   /**
    * Renders the Worker AI's system prompt.
    *
+   * @param name the portfolio owner's name, or an empty string if unavailable
    * @return the rendered system prompt
    */
-  public String getSystemPromptForWorkerAI() {
+  public String getSystemPromptForWorkerAI(final String name) {
     StringOutput output = new StringOutput();
-    templateEngine.render("responder-system.jte", Map.of(), output);
+    templateEngine.render("responder-system.jte", Map.of("name", name), output);
     return output.toString();
   }
 

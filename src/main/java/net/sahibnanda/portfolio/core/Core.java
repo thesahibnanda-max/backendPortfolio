@@ -1,5 +1,6 @@
 package net.sahibnanda.portfolio.core;
 
+import lombok.extern.slf4j.Slf4j;
 import net.sahibnanda.portfolio.config.AuthProperties;
 import net.sahibnanda.portfolio.entity.Message;
 import net.sahibnanda.portfolio.exception.CacheSetException;
@@ -52,6 +53,7 @@ import java.util.Objects;
  * Wires the Gate (sign-up/login), Orchestrator, and Worker AI services into the
  * operations a future controller layer will expose.
  */
+@Slf4j
 @Service
 public class Core {
 
@@ -319,6 +321,8 @@ public class Core {
       List<Message> history = existingChat.getMessages();
       OrchestratorResponse routing =
           orchestratorService.route(history, request.getMessage());
+      log.info("Orchestrator routed to {} ({})", routing.getRequiredContexts(),
+          routing.getReason());
       String answer = workerService.respond(routing.getRequiredContexts(),
           history, request.getMessage());
       userChatService.saveUserMessage(username, request.getChatId(),

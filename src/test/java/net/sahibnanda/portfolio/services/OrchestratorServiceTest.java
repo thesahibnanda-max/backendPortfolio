@@ -6,9 +6,21 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import net.sahibnanda.portfolio.cache.InMemoryCache;
+import net.sahibnanda.portfolio.cache.ValkeyCache;
+import net.sahibnanda.portfolio.client.CodeforcesClient;
+import net.sahibnanda.portfolio.client.GitHubClient;
 import net.sahibnanda.portfolio.client.GroqClient;
+import net.sahibnanda.portfolio.client.LeetcodeClient;
+import net.sahibnanda.portfolio.client.ProfileClient;
+import net.sahibnanda.portfolio.config.CodeforcesProperties;
+import net.sahibnanda.portfolio.config.DetailsProperties;
+import net.sahibnanda.portfolio.config.GitHubProperties;
 import net.sahibnanda.portfolio.config.GroqProperties;
 import net.sahibnanda.portfolio.config.LLMProperties;
+import net.sahibnanda.portfolio.config.LeetcodeProperties;
+import net.sahibnanda.portfolio.config.ProfileProperties;
+import net.sahibnanda.portfolio.config.ValkeyProperties;
 import net.sahibnanda.portfolio.entity.Message;
 import net.sahibnanda.portfolio.entity.Role;
 import net.sahibnanda.portfolio.enums.ContextType;
@@ -45,8 +57,28 @@ class OrchestratorServiceTest {
         0.8, 1.4, 0.9, 1.0, 2048);
     LLMService llmService = new LLMService(groqClient, llmProperties);
 
-    orchestratorService =
-        new OrchestratorService(llmService, new PromptTemplates());
+    DetailsProperties detailsProperties =
+        new DetailsProperties(List.of("imsahibnanda"), List.of("shisukenohara"),
+            List.of("thesahibnanda-max", "thesahibnanda"));
+    LeetcodeClient leetcodeClient =
+        new LeetcodeClient(new LeetcodeProperties("https://leetcode.com"));
+    CodeforcesClient codeforcesClient = new CodeforcesClient(
+        new CodeforcesProperties("https://codeforces.com"));
+    GitHubClient gitHubClient =
+        new GitHubClient(new GitHubProperties("https://api.github.com"));
+    ProfileClient profileClient = new ProfileClient(new ProfileProperties(
+        "https://zaiwjonzbotyjmoghqzh.supabase.co/storage/v1/object/"
+            + "public/portfolio/profile.json",
+        "https://zaiwjonzbotyjmoghqzh.supabase.co/storage/v1/object/"
+            + "public/portfolio/personality.json"));
+    CacheService cacheService = new CacheService(new InMemoryCache(),
+        new ValkeyCache(new ValkeyProperties("localhost", 6379, null, null)));
+    DetailsService detailsService =
+        new DetailsService(detailsProperties, leetcodeClient, codeforcesClient,
+            gitHubClient, profileClient, cacheService);
+
+    orchestratorService = new OrchestratorService(llmService,
+        new PromptTemplates(), detailsService);
   }
 
   @Test
@@ -96,6 +128,16 @@ class OrchestratorServiceTest {
 
     assertThat(response.getRequiredContexts()).contains(ContextType.GITHUB,
         ContextType.LEETCODE);
+  }
+
+  @Test
+  void routesBroadCompetitiveProgrammingQuestionToBothPlatforms() {
+    OrchestratorResponse response = orchestratorService.route(List.of(),
+        "What is your competitive programming background?");
+    System.out.println(response);
+
+    assertThat(response.getRequiredContexts()).contains(ContextType.LEETCODE,
+        ContextType.CODEFORCES);
   }
 
   @Test
@@ -149,6 +191,55 @@ class OrchestratorServiceTest {
     assertThat(response.getRequiredContexts()).contains(ContextType.GITHUB);
     assertThat(response.getRequiredContexts())
         .doesNotContain(ContextType.PERSONALITY);
+  }
+
+  @Test
+  void doesNotCarryOverAPriorNoInfoVerdictToARelatedRealQuestion() {
+    List<Message> history = List.of(
+        new Message(Role.USER,
+            "What is your competitive programming DSA course?",
+            Instant.parse("2026-08-02T12:00:00Z")),
+        new Message(Role.ASSISTANT,
+            "I'm not aware of any specific course like that.",
+            Instant.parse("2026-08-02T12:00:05Z")));
+
+    OrchestratorResponse response = orchestratorService.route(history,
+        "What are your competitive programming DSA skills and "
+            + "achievements?");
+    System.out.println(response);
+
+    // A prior "no such course" verdict must not suppress routing for a
+    // differently-phrased follow-up naming real, listed-domain concepts.
+    assertThat(response.getRequiredContexts()).contains(ContextType.PROFILE,
+        ContextType.LEETCODE, ContextType.CODEFORCES);
+    assertThat(response.getRequiredContexts()).doesNotContain(ContextType.NONE);
+  }
+
+  @Test
+  void routesShortDefineQuestionToTheOverlappingDomainNotNone() {
+    OrchestratorResponse response =
+        orchestratorService.route(List.of(), "Define appearance.");
+    System.out.println(response);
+
+    // "appearance" is also PERSONALITY's own subject matter -- the router
+    // should read this as "describe his appearance," not a dictionary
+    // lookup of the word.
+    assertThat(response.getRequiredContexts())
+        .contains(ContextType.PERSONALITY);
+    assertThat(response.getRequiredContexts()).doesNotContain(ContextType.NONE);
+  }
+
+  @Test
+  void routesGenericDefineQuestionWithNoDomainOverlapToNone() {
+    OrchestratorResponse response =
+        orchestratorService.route(List.of(), "Define recursion.");
+    System.out.println(response);
+
+    // "recursion" doesn't name any listed domain's subject matter -- this
+    // must still route to NONE, so the new rule doesn't overcorrect into
+    // always avoiding NONE for short/generic-sounding questions.
+    assertThat(response.getRequiredContexts())
+        .containsExactly(ContextType.NONE);
   }
 
   @Test

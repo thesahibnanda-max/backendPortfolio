@@ -37,19 +37,27 @@ public final class OrchestratorService {
   /** Renders the orchestrator's system/user prompts via JTE. */
   private final PromptTemplates promptTemplates;
 
+  /** Supplies the portfolio owner's name for the system prompt. */
+  private final DetailsService detailsService;
+
   /**
    * Creates a new orchestrator service.
    *
    * @param llmServiceClient client used to make the real LLM call
    * @param orchestratorPromptTemplates renders the orchestrator's system/user
    *        prompts via JTE
+   * @param detailsClient supplies the portfolio owner's name for the system
+   *        prompt
    */
   public OrchestratorService(final LLMService llmServiceClient,
-      final PromptTemplates orchestratorPromptTemplates) {
+      final PromptTemplates orchestratorPromptTemplates,
+      final DetailsService detailsClient) {
     this.llmService = Objects.requireNonNull(llmServiceClient,
         "llmServiceClient must not be null");
     this.promptTemplates = Objects.requireNonNull(orchestratorPromptTemplates,
         "orchestratorPromptTemplates must not be null");
+    this.detailsService = Objects.requireNonNull(detailsClient,
+        "detailsService must not be null");
   }
 
   /**
@@ -71,7 +79,9 @@ public final class OrchestratorService {
       throw new IllegalArgumentException("userMessage is required.");
     }
 
-    String systemPrompt = promptTemplates.getSystemPromptForOrchestratorAI();
+    String name = detailsService.getPortfolioOwnerName();
+    String systemPrompt =
+        promptTemplates.getSystemPromptForOrchestratorAI(name);
     String userPrompt = promptTemplates
         .getUserPromptForOrchestratorAI(conversationHistory, userMessage);
 

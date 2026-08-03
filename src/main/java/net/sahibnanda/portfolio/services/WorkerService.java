@@ -28,6 +28,9 @@ public final class WorkerService {
   /** Loads and formats the domains the Orchestrator selected. */
   private final ContextAggregatorService contextAggregatorService;
 
+  /** Supplies the portfolio owner's name for the system prompt. */
+  private final DetailsService detailsService;
+
   /**
    * Creates a new worker service.
    *
@@ -36,16 +39,21 @@ public final class WorkerService {
    *        JTE
    * @param contextAggregator loads and formats the domains the Orchestrator
    *        selected
+   * @param detailsClient supplies the portfolio owner's name for the system
+   *        prompt
    */
   public WorkerService(final LLMService llmServiceClient,
       final PromptTemplates workerPromptTemplates,
-      final ContextAggregatorService contextAggregator) {
+      final ContextAggregatorService contextAggregator,
+      final DetailsService detailsClient) {
     this.llmService = Objects.requireNonNull(llmServiceClient,
         "llmServiceClient must not be null");
     this.promptTemplates = Objects.requireNonNull(workerPromptTemplates,
         "workerPromptTemplates must not be null");
     this.contextAggregatorService = Objects.requireNonNull(contextAggregator,
         "contextAggregator must not be null");
+    this.detailsService = Objects.requireNonNull(detailsClient,
+        "detailsService must not be null");
   }
 
   /**
@@ -67,7 +75,8 @@ public final class WorkerService {
 
     String aggregatedContext =
         contextAggregatorService.aggregate(requiredContexts);
-    String systemPrompt = promptTemplates.getSystemPromptForWorkerAI();
+    String systemPrompt = promptTemplates
+        .getSystemPromptForWorkerAI(detailsService.getPortfolioOwnerName());
     String userPrompt = promptTemplates.getUserPromptForWorkerAI(
         conversationHistory, userMessage, aggregatedContext);
 

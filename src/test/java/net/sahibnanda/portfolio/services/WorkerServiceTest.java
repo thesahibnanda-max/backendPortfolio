@@ -73,7 +73,7 @@ class WorkerServiceTest {
         new ContextAggregatorService(detailsService);
 
     workerService = new WorkerService(llmService, new PromptTemplates(),
-        contextAggregatorService);
+        contextAggregatorService, detailsService);
   }
 
   @Test

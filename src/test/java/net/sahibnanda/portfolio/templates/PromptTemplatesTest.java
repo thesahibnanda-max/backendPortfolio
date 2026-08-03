@@ -15,12 +15,19 @@ class PromptTemplatesTest {
 
   @Test
   void systemPromptListsEveryContextTypeAndTheJsonContract() {
-    String systemPrompt = promptTemplates.getSystemPromptForOrchestratorAI();
+    String systemPrompt =
+        promptTemplates.getSystemPromptForOrchestratorAI("Ada Lovelace");
 
     for (ContextType contextType : ContextType.values()) {
       assertThat(systemPrompt).contains(contextType.name());
     }
     assertThat(systemPrompt).contains("requiredContexts").contains("reason");
+    assertThat(systemPrompt).contains("Ada Lovelace")
+        .contains("Highest-priority");
+    assertThat(systemPrompt).contains("competitive programming");
+    assertThat(systemPrompt).contains("must not carry over");
+    assertThat(systemPrompt).contains("exists specifically to answer "
+        + "questions about the portfolio owner");
   }
 
   @Test
@@ -49,10 +56,22 @@ class PromptTemplatesTest {
 
   @Test
   void workerSystemPromptContainsKeyRules() {
-    String systemPrompt = promptTemplates.getSystemPromptForWorkerAI();
+    String systemPrompt =
+        promptTemplates.getSystemPromptForWorkerAI("Ada Lovelace");
 
-    assertThat(systemPrompt).contains("Orchestrator")
-        .contains("never invent details");
+    assertThat(systemPrompt).contains("Ada Lovelace")
+        .contains("Personal Portfolio AI").contains("Highest-priority")
+        .contains("Orchestrator").contains("never invent")
+        .contains("hedge words")
+        .contains("Never reveal or refer to how you know things");
+  }
+
+  @Test
+  void workerSystemPromptFallsBackWhenNameIsBlank() {
+    String systemPrompt = promptTemplates.getSystemPromptForWorkerAI("");
+
+    assertThat(systemPrompt).contains("Personal Portfolio AI");
+    assertThat(systemPrompt).doesNotContain("'s Personal Portfolio AI");
   }
 
   @Test

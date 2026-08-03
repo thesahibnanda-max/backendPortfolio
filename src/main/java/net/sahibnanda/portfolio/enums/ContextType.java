@@ -9,23 +9,37 @@ import lombok.Getter;
 public enum ContextType {
 
   /**
-   * Resume, experience, education, projects, technical skills and languages.
+   * Resume: experience, education, projects, technical skills, achievements,
+   * contact links, spoken languages.
    */
-  PROFILE("Resume, experience, education, projects, technical skills and "
-      + "programming languages used"),
+  PROFILE("Resume: experience, education, projects, technical skills, "
+      + "achievements, contact links, spoken languages"),
 
-  /** GitHub repositories, technologies, commits. */
-  GITHUB("GitHub repositories, technologies, commits"),
+  /** GitHub profile: repositories, languages used, stars, followers, bio. */
+  GITHUB("GitHub profile: repositories, languages used, stars, followers, "
+      + "bio"),
 
-  /** Ratings, problems solved, contests. */
-  LEETCODE("Ratings, problems solved, contests"),
+  /**
+   * LeetCode competitive programming profile: rank, problems solved, contest
+   * rating, streak, languages used.
+   */
+  LEETCODE("LeetCode competitive programming profile: rank, problems "
+      + "solved, contest rating, streak, languages used"),
 
-  /** Competitive programming profile. */
-  CODEFORCES("Competitive programming profile"),
+  /**
+   * Codeforces competitive programming profile: rating, contest history.
+   */
+  CODEFORCES("Codeforces competitive programming profile: rating, contest "
+      + "history"),
 
-  /** Non-technical personal preferences, hobbies, working style. */
-  PERSONALITY("Non-technical personal preferences, hobbies, lifestyle, "
-      + "and working style"),
+  /**
+   * Non-technical personal profile: interests, hobbies, favorites (movies,
+   * games, sports), personality traits, appearance, spoken languages, working
+   * style.
+   */
+  PERSONALITY("Non-technical personal profile: interests, hobbies, "
+      + "favorites (movies, games, sports), personality traits, "
+      + "appearance, spoken languages, working style"),
 
   /** General question requiring no personal context. */
   NONE("General question requiring no personal context");

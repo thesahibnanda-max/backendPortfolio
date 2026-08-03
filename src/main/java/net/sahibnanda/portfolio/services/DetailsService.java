@@ -199,6 +199,19 @@ public final class DetailsService {
   }
 
   /**
+   * Returns just the portfolio owner's name, without the rest of
+   * {@link #getProfileDetails()}'s bundled profile/LeetCode data.
+   *
+   * @return the portfolio owner's name, or an empty string if unavailable
+   */
+  public String getPortfolioOwnerName() {
+    ProfileResponse.ProfileDetails identity =
+        getProfileDetails().getProfileDetails();
+    return identity == null || identity.getName() == null ? ""
+        : identity.getName();
+  }
+
+  /**
    * Fetches the portfolio owner's personality profile, enriched with the
    * biography LeetCode records.
    *
