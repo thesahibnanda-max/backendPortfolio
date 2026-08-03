@@ -2,6 +2,7 @@ package net.sahibnanda.portfolio.core;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import net.sahibnanda.portfolio.cache.ValkeyCache;
 import net.sahibnanda.portfolio.config.AuthProperties;
 import net.sahibnanda.portfolio.pojo.ChatRequestPOJO;
 import net.sahibnanda.portfolio.pojo.ChatResponsePOJO;
@@ -28,6 +29,9 @@ class CoreTest extends AbstractRepositoryIntegrationTest {
 
   @Autowired
   private AuthProperties authProperties;
+
+  @Autowired
+  private ValkeyCache valkeyCache;
 
   @Test
   void signUpCreatesUserAndReturnsDecryptableToken() {
@@ -203,10 +207,17 @@ class CoreTest extends AbstractRepositoryIntegrationTest {
 
   @Test
   void userPromptExceedingRateLimitReturnsTooManyRequests() {
+    // These rate-limit keys live in the real, shared Valkey instance and
+    // aren't reset between test runs (unlike Postgres, via
+    // cleanDatabase()) -- clear them so this test's count always starts
+    // fresh, regardless of leftover state from a previous run.
+    valkeyCache.delete("userPrompt");
+    valkeyCache.delete("userPrompt:liam");
+
     String token = signUpAndGetToken("liam");
 
     ResponsePOJO response = null;
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 6; i++) {
       response = core.userPrompt(
           ChatRequestPOJO.builder().headers(Map.of(AUTH_HEADER, token))
               .chatId(StringUtils.generateUlid()).message("Hi").build());
