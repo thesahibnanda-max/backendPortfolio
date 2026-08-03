@@ -46,4 +46,35 @@ class PromptTemplatesTest {
     assertThat(userPrompt).contains("hi").contains("hello there");
     assertThat(userPrompt).contains("What is your LeetCode rating?");
   }
+
+  @Test
+  void workerSystemPromptContainsKeyRules() {
+    String systemPrompt = promptTemplates.getSystemPromptForWorkerAI();
+
+    assertThat(systemPrompt).contains("Orchestrator")
+        .contains("never invent details");
+  }
+
+  @Test
+  void workerUserPromptContainsContextHistoryAndCurrentMessage() {
+    List<Message> history = List.of(
+        new Message(Role.USER, "hi", Instant.parse("2026-08-02T12:00:00Z")),
+        new Message(Role.ASSISTANT, "hello there",
+            Instant.parse("2026-08-02T12:00:05Z")));
+
+    String userPrompt = promptTemplates.getUserPromptForWorkerAI(history,
+        "What is your LeetCode rating?", "LEETCODE: rank 115794");
+
+    assertThat(userPrompt).contains("LEETCODE: rank 115794")
+        .contains("Conversation so far").contains("hi").contains("hello there")
+        .contains("What is your LeetCode rating?");
+  }
+
+  @Test
+  void workerUserPromptOmitsContextHeaderWhenContextIsBlank() {
+    String userPrompt = promptTemplates.getUserPromptForWorkerAI(List.of(),
+        "What is binary search?", "");
+
+    assertThat(userPrompt).doesNotContain("Context:");
+  }
 }

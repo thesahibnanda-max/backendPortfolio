@@ -48,4 +48,38 @@ public final class PromptTemplates {
         conversationHistory, "currentMessage", currentMessage), output);
     return output.toString();
   }
+
+  /**
+   * Renders the Worker AI's system prompt.
+   *
+   * @return the rendered system prompt
+   */
+  public String getSystemPromptForWorkerAI() {
+    StringOutput output = new StringOutput();
+    templateEngine.render("responder-system.jte", Map.of(), output);
+    return output.toString();
+  }
+
+  /**
+   * Renders the Worker AI's user-turn prompt: aggregated context, prior
+   * conversation history, then the current message.
+   *
+   * @param conversationHistory prior messages in the conversation, oldest first
+   * @param currentMessage the user's latest message
+   * @param aggregatedContext the pre-formatted, compact context text from
+   *        {@link net.sahibnanda.portfolio.services.ContextAggregatorService
+   *        #aggregate(java.util.List)}
+   * @return the rendered user prompt
+   */
+  public String getUserPromptForWorkerAI(
+      final List<Message> conversationHistory, final String currentMessage,
+      final String aggregatedContext) {
+    StringOutput output = new StringOutput();
+    templateEngine
+        .render("responder-user.jte",
+            Map.of("conversationHistory", conversationHistory, "currentMessage",
+                currentMessage, "aggregatedContext", aggregatedContext),
+            output);
+    return output.toString();
+  }
 }
