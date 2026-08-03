@@ -98,6 +98,40 @@ public final class UserChatService {
   }
 
   /**
+   * Lists every chat owned by the given user.
+   *
+   * @param username the username whose chats are requested
+   * @return every chat owned by the user, newest first, or an empty list if the
+   *         user has no chats
+   * @throws IllegalArgumentException if {@code username} is blank
+   * @throws UserNotFoundException if no user exists with the given username
+   * @throws net.sahibnanda.portfolio.exception.DatabaseOperationException if
+   *         the lookup fails
+   */
+  public List<ChatObject> listChats(final String username) {
+    requireNonBlank(username, "username");
+    if (!users.exists(username)) {
+      throw new UserNotFoundException(username);
+    }
+    return toChatObjects(chats.findChats(username));
+  }
+
+  /**
+   * Fetches a single chat owned by the given user.
+   *
+   * @param username the username the chat must belong to
+   * @param chatId the identifier of the chat to fetch
+   * @return the requested chat
+   * @throws ChatNotFoundException if no chat exists with the given identifier
+   * @throws ChatAccessDeniedException if the chat belongs to a different user
+   * @throws net.sahibnanda.portfolio.exception.DatabaseOperationException if
+   *         the lookup fails
+   */
+  public ChatObject getChatById(final String username, final String chatId) {
+    return toChatObject(validateOwnership(username, chatId));
+  }
+
+  /**
    * Creates a new chat for the given user.
    *
    * @param username the username of the chat owner

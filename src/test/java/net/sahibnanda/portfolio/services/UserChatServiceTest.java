@@ -82,6 +82,58 @@ class UserChatServiceTest extends AbstractRepositoryIntegrationTest {
   }
 
   @Test
+  void listChatsReturnsAllChatsForUser() {
+    userChatService.signUp("alice", "s3cret");
+    userChatService.createChat("alice", "Chat 1");
+    userChatService.createChat("alice", "Chat 2");
+
+    List<ChatObject> chats = userChatService.listChats("alice");
+
+    assertThat(chats).hasSize(2);
+    assertThat(chats).extracting(ChatObject::getChatTitle)
+        .containsExactlyInAnyOrder("Chat 1", "Chat 2");
+  }
+
+  @Test
+  void listChatsForUnknownUserThrowsUserNotFound() {
+    assertThatThrownBy(() -> userChatService.listChats("nobody"))
+        .isInstanceOf(UserNotFoundException.class);
+  }
+
+  @Test
+  void getChatByIdReturnsTheChat() {
+    userChatService.signUp("alice", "s3cret");
+    List<ChatObject> created = userChatService.createChat("alice", "Chat 1");
+    String chatId = created.get(0).getChatId();
+
+    ChatObject chat = userChatService.getChatById("alice", chatId);
+
+    assertThat(chat.getChatId()).isEqualTo(chatId);
+    assertThat(chat.getChatTitle()).isEqualTo("Chat 1");
+  }
+
+  @Test
+  void getChatByIdOnUnknownChatThrowsNotFound() {
+    userChatService.signUp("alice", "s3cret");
+
+    assertThatThrownBy(
+        () -> userChatService.getChatById("alice", StringUtils.generateUlid()))
+        .isInstanceOf(ChatNotFoundException.class);
+  }
+
+  @Test
+  void getChatByIdByNonOwnerThrowsAccessDenied() {
+    userChatService.signUp("alice", "s3cret");
+    userChatService.signUp("bob", "s3cret");
+    List<ChatObject> aliceChats =
+        userChatService.createChat("alice", "Alice's Chat");
+    String chatId = aliceChats.get(0).getChatId();
+
+    assertThatThrownBy(() -> userChatService.getChatById("bob", chatId))
+        .isInstanceOf(ChatAccessDeniedException.class);
+  }
+
+  @Test
   void updateChatTitleReturnsAllChatsWithUpdatedTitle() {
     userChatService.signUp("alice", "s3cret");
     List<ChatObject> created =

@@ -103,6 +103,25 @@ public final class ValkeyCache {
   }
 
   /**
+   * Atomically increments the counter stored at {@code key}, starting its
+   * time-to-live only when the counter is first created -- so the window resets
+   * exactly {@code ttlSeconds} after the first increment, regardless of how
+   * many further increments happen inside that window.
+   *
+   * @param key the counter's cache key
+   * @param ttlSeconds how long, in seconds, the window lasts once started
+   * @return the counter's value after this increment
+   * @throws ValkeyCacheException if the increment or expiry write fails
+   */
+  public long incrementWithExpire(final String key, final long ttlSeconds) {
+    long count = await(glideClient.incr(key));
+    if (count == 1) {
+      await(glideClient.expire(key, ttlSeconds));
+    }
+    return count;
+  }
+
+  /**
    * Deletes a cached value by key.
    *
    * @param key the cache key

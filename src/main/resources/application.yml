@@ -56,4 +56,7 @@ llm:
   max-temperature: 1.4
   min-top-p: 0.9
   max-top-p: 1.0
-  max-completion-tokens: 1024
+  max-completion-tokens: 2048
+
+auth:
+  secret-key: ${AUTH_SECRET_KEY:local-dev-only-change-me}

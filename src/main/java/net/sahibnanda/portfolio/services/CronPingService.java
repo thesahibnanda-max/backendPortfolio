@@ -8,8 +8,8 @@ import org.springframework.stereotype.Service;
 
 /**
  * Periodically pings Valkey and the database so free-tier instances of either
- * don't spin down from inactivity. The same {@link #ping()} logic will also
- * back a {@code /health} endpoint.
+ * don't spin down from inactivity. {@link #pingDatabase()} also backs a
+ * {@code /health} endpoint.
  */
 @Slf4j
 @Service
@@ -47,9 +47,19 @@ public final class CronPingService {
     }
 
     try {
-      dslContext.selectOne().fetch();
+      pingDatabase();
     } catch (RuntimeException e) {
       log.error("Database keep-warm ping failed.", e);
     }
+  }
+
+  /**
+   * Checks database connectivity by running a trivial query.
+   *
+   * @throws org.jooq.exception.DataAccessException if the database is
+   *         unreachable or the query fails
+   */
+  public void pingDatabase() {
+    dslContext.selectOne().fetch();
   }
 }
