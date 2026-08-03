@@ -119,6 +119,18 @@ class CoreTest extends AbstractRepositoryIntegrationTest {
   }
 
   @Test
+  void createChatWithBlankTitleReturnsBadRequestError() {
+    String token = signUpAndGetToken("piper");
+
+    ResponsePOJO response = core.createChat(
+        ChatRequestPOJO.builder().headers(Map.of(AUTH_HEADER, token)).build());
+
+    assertThat(response.getHttpStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response).isInstanceOf(ErrorResponsePOJO.class);
+    assertThat(((ErrorResponsePOJO) response).getShowMessageAsIs()).isTrue();
+  }
+
+  @Test
   void allChatsReturnsEveryChatForTheUser() {
     String token = signUpAndGetToken("grace");
     createChat(token, "Chat 1");

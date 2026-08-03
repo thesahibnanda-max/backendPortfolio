@@ -56,6 +56,24 @@ class ControllerTest extends AbstractRepositoryIntegrationTest {
   }
 
   @Test
+  void createChatWithWrongJsonKeyCasingReturnsBadRequest() throws Exception {
+    String signUpBody = mockMvc
+        .perform(
+            post("/signup").contentType(MediaType.APPLICATION_JSON).content("""
+                {"username":"quinn","password":"Str0ng!Pass"}"""))
+        .andReturn().getResponse().getHeader("X-Auth-Token");
+
+    // "chat_title" (snake_case) doesn't match the "chatTitle" property, so
+    // it's silently dropped rather than deserialized -- this should be
+    // caught as a validation error, not reach the database as a null.
+    mockMvc
+        .perform(post("/chats").header("X-Auth-Token", signUpBody)
+            .contentType(MediaType.APPLICATION_JSON).content("""
+                {"chat_title":"Chat Number 1"}"""))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
   void createChatThenListThenGetThenRenameRoundTrips() throws Exception {
     String signUpBody = mockMvc
         .perform(

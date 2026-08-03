@@ -82,6 +82,14 @@ class UserChatServiceTest extends AbstractRepositoryIntegrationTest {
   }
 
   @Test
+  void createChatWithBlankTitleThrowsIllegalArgument() {
+    userChatService.signUp("alice", "s3cret");
+
+    assertThatThrownBy(() -> userChatService.createChat("alice", " "))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
   void listChatsReturnsAllChatsForUser() {
     userChatService.signUp("alice", "s3cret");
     userChatService.createChat("alice", "Chat 1");
@@ -148,6 +156,18 @@ class UserChatServiceTest extends AbstractRepositoryIntegrationTest {
   }
 
   @Test
+  void updateChatTitleWithBlankTitleThrowsIllegalArgument() {
+    userChatService.signUp("alice", "s3cret");
+    List<ChatObject> created =
+        userChatService.createChat("alice", "Original Title");
+    String chatId = created.get(0).getChatId();
+
+    assertThatThrownBy(
+        () -> userChatService.updateChatTitle("alice", chatId, " "))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
   void updateChatTitleOnUnknownChatThrowsNotFound() {
     userChatService.signUp("alice", "s3cret");
 
@@ -195,6 +215,17 @@ class UserChatServiceTest extends AbstractRepositoryIntegrationTest {
     assertThat(chat.getMessages()).hasSize(2);
     assertThat(chat.getMessages().get(1).message()).isEqualTo("hi there");
     assertThat(chat.getMessages().get(1).role()).isEqualTo(Role.ASSISTANT);
+  }
+
+  @Test
+  void saveUserMessageWithBlankContentThrowsIllegalArgument() {
+    userChatService.signUp("alice", "s3cret");
+    List<ChatObject> created = userChatService.createChat("alice", "Chat 1");
+    String chatId = created.get(0).getChatId();
+
+    assertThatThrownBy(
+        () -> userChatService.saveUserMessage("alice", chatId, " "))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test

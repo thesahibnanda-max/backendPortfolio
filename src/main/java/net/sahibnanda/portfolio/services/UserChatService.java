@@ -138,12 +138,14 @@ public final class UserChatService {
    * @param chatTitle the title of the new chat
    * @return every chat owned by the user, newest first, including the one just
    *         created
+   * @throws IllegalArgumentException if {@code chatTitle} is blank
    * @throws UserNotFoundException if no user exists with the given username
    * @throws net.sahibnanda.portfolio.exception.DatabaseOperationException if
    *         the chat cannot be persisted
    */
   public List<ChatObject> createChat(final String username,
       final String chatTitle) {
+    requireNonBlank(chatTitle, "chatTitle");
     if (!users.exists(username)) {
       throw new UserNotFoundException(username);
     }
@@ -160,6 +162,7 @@ public final class UserChatService {
    * @param title the new title for the chat
    * @return every chat owned by the user, newest first, reflecting the updated
    *         title
+   * @throws IllegalArgumentException if {@code title} is blank
    * @throws ChatNotFoundException if no chat exists with the given identifier
    * @throws ChatAccessDeniedException if the chat belongs to a different user
    * @throws net.sahibnanda.portfolio.exception.DatabaseOperationException if
@@ -167,6 +170,7 @@ public final class UserChatService {
    */
   public List<ChatObject> updateChatTitle(final String username,
       final String chatId, final String title) {
+    requireNonBlank(title, "title");
     validateOwnership(username, chatId);
     chats.updateChatTitle(chatId, title);
     return toChatObjects(chats.findChats(username));
@@ -179,6 +183,7 @@ public final class UserChatService {
    * @param chatId the identifier of the chat to append to
    * @param content the message content
    * @return the chat, with the new message included
+   * @throws IllegalArgumentException if {@code content} is blank
    * @throws ChatNotFoundException if no chat exists with the given identifier
    * @throws ChatAccessDeniedException if the chat belongs to a different user
    * @throws net.sahibnanda.portfolio.exception.DatabaseOperationException if
@@ -196,6 +201,7 @@ public final class UserChatService {
    * @param chatId the identifier of the chat to append to
    * @param content the message content
    * @return the chat, with the new message included
+   * @throws IllegalArgumentException if {@code content} is blank
    * @throws ChatNotFoundException if no chat exists with the given identifier
    * @throws ChatAccessDeniedException if the chat belongs to a different user
    * @throws net.sahibnanda.portfolio.exception.DatabaseOperationException if
@@ -208,6 +214,7 @@ public final class UserChatService {
 
   private ChatObject appendMessage(final String username, final String chatId,
       final Role role, final String content) {
+    requireNonBlank(content, "content");
     ChatEntity chat = validateOwnership(username, chatId);
 
     List<Message> updatedMessages = new ArrayList<>(chat.getMessages());
