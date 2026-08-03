@@ -2,6 +2,7 @@ package net.sahibnanda.portfolio.repository.jooq;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import lombok.extern.slf4j.Slf4j;
 import net.sahibnanda.portfolio.entity.UserEntity;
 import net.sahibnanda.portfolio.exception.DatabaseOperationException;
 import net.sahibnanda.portfolio.exception.DuplicateUsernameException;
@@ -15,6 +16,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
 
 /** jOOQ-backed implementation of {@link UserRepository}. */
+@Slf4j
 @Repository
 @SuppressWarnings("java:S8688")
 public class JooqUserRepository implements UserRepository {
@@ -51,6 +53,7 @@ public class JooqUserRepository implements UserRepository {
     } catch (DuplicateKeyException _) {
       throw new DuplicateUsernameException(username);
     } catch (org.jooq.exception.DataAccessException | DataAccessException e) {
+      log.error("Failed to create user: {}", username, e);
       throw new DatabaseOperationException("Failed to create user: " + username,
           e);
     }
@@ -72,6 +75,7 @@ public class JooqUserRepository implements UserRepository {
           .where(Tables.USERS.USERNAME.eq(username))
           .fetchOptional(this::toEntity);
     } catch (org.jooq.exception.DataAccessException | DataAccessException e) {
+      log.error("Failed to find user: {}", username, e);
       throw new DatabaseOperationException("Failed to find user: " + username,
           e);
     }
@@ -91,6 +95,7 @@ public class JooqUserRepository implements UserRepository {
       return dslContext.fetchExists(dslContext.selectFrom(Tables.USERS)
           .where(Tables.USERS.USERNAME.eq(username)));
     } catch (org.jooq.exception.DataAccessException | DataAccessException e) {
+      log.error("Failed to check user existence: {}", username, e);
       throw new DatabaseOperationException(
           "Failed to check user existence: " + username, e);
     }
@@ -110,6 +115,7 @@ public class JooqUserRepository implements UserRepository {
       deleted = dslContext.deleteFrom(Tables.USERS)
           .where(Tables.USERS.USERNAME.eq(username)).execute();
     } catch (org.jooq.exception.DataAccessException | DataAccessException e) {
+      log.error("Failed to delete user: {}", username, e);
       throw new DatabaseOperationException("Failed to delete user: " + username,
           e);
     }
@@ -135,6 +141,7 @@ public class JooqUserRepository implements UserRepository {
           .set(Tables.USERS.PASSWORD_HASH, hashedPassword)
           .where(Tables.USERS.USERNAME.eq(username)).execute();
     } catch (org.jooq.exception.DataAccessException | DataAccessException e) {
+      log.error("Failed to update password for user: {}", username, e);
       throw new DatabaseOperationException(
           "Failed to update password for user: " + username, e);
     }

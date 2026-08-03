@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+  <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+  <springProperty name="lokiUrl" source="loki.url"
+      defaultValue="http://localhost:3100"/>
+  <springProperty name="lokiUsername" source="loki.username"
+      defaultValue=""/>
+  <springProperty name="lokiPassword" source="loki.password"
+      defaultValue=""/>
+  <springProperty name="appName" source="spring.application.name"
+      defaultValue="backend-portfolio"/>
+
+  <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+    <http>
+      <url>${lokiUrl}/loki/api/v1/push</url>
+      <auth>
+        <username>${lokiUsername}</username>
+        <password>${lokiPassword}</password>
+      </auth>
+      <requestTimeoutMs>15000</requestTimeoutMs>
+    </http>
+    <batch>
+      <maxBytes>65536</maxBytes>
+    </batch>
+    <labels>
+      app = ${appName}
+    </labels>
+  </appender>
+
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+    <appender-ref ref="LOKI"/>
+  </root>
+</configuration>

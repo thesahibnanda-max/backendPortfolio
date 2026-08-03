@@ -7,7 +7,9 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.io.UncheckedIOException;
 import lombok.experimental.UtilityClass;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @UtilityClass
 public final class JsonUtils {
 
@@ -28,6 +30,7 @@ public final class JsonUtils {
     try {
       return objectMapper.readValue(json, clazz);
     } catch (JsonProcessingException e) {
+      log.error("Failed to deserialize JSON into {}", clazz, e);
       throw new UncheckedIOException("Failed to deserialize JSON", e);
     }
   }
@@ -45,6 +48,7 @@ public final class JsonUtils {
     try {
       return objectMapper.readValue(json, typeReference);
     } catch (JsonProcessingException e) {
+      log.error("Failed to deserialize JSON into {}", typeReference, e);
       throw new UncheckedIOException("Failed to deserialize JSON", e);
     }
   }
@@ -59,6 +63,8 @@ public final class JsonUtils {
     try {
       return objectMapper.writeValueAsString(value);
     } catch (JsonProcessingException e) {
+      log.error("Failed to serialize object of type {}",
+          value == null ? null : value.getClass(), e);
       throw new UncheckedIOException("Failed to serialize object", e);
     }
   }

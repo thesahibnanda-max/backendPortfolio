@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
+import lombok.extern.slf4j.Slf4j;
 import net.sahibnanda.portfolio.config.GitHubProperties;
 import net.sahibnanda.portfolio.exception.GitHubCallException;
 import net.sahibnanda.portfolio.models.GitHubCommit;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Component;
  * Thin client over the public GitHub REST API used to fetch user profiles,
  * repositories and commits.
  */
+@Slf4j
 @Component
 public final class GitHubClient {
 
@@ -296,6 +298,8 @@ public final class GitHubClient {
       String responseBody = body != null ? body.string() : "";
 
       if (!response.isSuccessful()) {
+        log.error("GitHub API call to {} failed. HTTP {}: {}", url,
+            response.code(), responseBody);
         throw new GitHubCallException(
             String.format("GitHub API request failed. HTTP %d: %s",
                 response.code(), responseBody));
@@ -304,6 +308,7 @@ public final class GitHubClient {
       return responseBody;
 
     } catch (IOException e) {
+      log.error("Failed to call GitHub API at {}.", url, e);
       throw new GitHubCallException("Failed to call GitHub API.", e);
     }
   }

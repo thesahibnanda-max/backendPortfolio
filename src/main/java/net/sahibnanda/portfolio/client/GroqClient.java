@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Objects;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import net.sahibnanda.portfolio.config.GroqProperties;
 import net.sahibnanda.portfolio.exception.GroqCallException;
 import net.sahibnanda.portfolio.models.GroqCallRequest;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Component;
  * Thin client over the Groq chat completions API used to generate AI-powered
  * summaries for the portfolio.
  */
+@Slf4j
 @Component
 public final class GroqClient {
 
@@ -113,6 +115,8 @@ public final class GroqClient {
       String responseBody = body != null ? body.string() : "";
 
       if (!response.isSuccessful()) {
+        log.error("Groq API request failed. HTTP {}: {}", response.code(),
+            responseBody);
         throw new GroqCallException(
             String.format("Groq API request failed. HTTP %d: %s",
                 response.code(), responseBody));
@@ -121,6 +125,7 @@ public final class GroqClient {
       return JsonUtils.fromJson(responseBody, GroqCallResponse.class);
 
     } catch (IOException e) {
+      log.error("Failed to call Groq API.", e);
       throw new GroqCallException("Failed to call Groq API.", e);
     }
   }

@@ -3,6 +3,7 @@ package net.sahibnanda.portfolio.client;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Objects;
+import lombok.extern.slf4j.Slf4j;
 import net.sahibnanda.portfolio.config.CodeforcesProperties;
 import net.sahibnanda.portfolio.exception.CodeforcesCallException;
 import net.sahibnanda.portfolio.models.CodeforcesUserRatingResponse;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Component;
  * Thin client over the Codeforces public API used to fetch a user's contest
  * rating history.
  */
+@Slf4j
 @Component
 public final class CodeforcesClient {
 
@@ -99,6 +101,8 @@ public final class CodeforcesClient {
       String responseBody = body != null ? body.string() : "";
 
       if (!response.isSuccessful()) {
+        log.error("Codeforces API request failed. HTTP {}: {}", response.code(),
+            responseBody);
         throw new CodeforcesCallException(
             String.format("Codeforces API request failed. HTTP %d: %s",
                 response.code(), responseBody));
@@ -108,6 +112,8 @@ public final class CodeforcesClient {
           JsonUtils.fromJson(responseBody, CodeforcesUserRatingResponse.class);
 
       if (!STATUS_OK.equals(ratingResponse.getStatus())) {
+        log.error("Codeforces API returned a non-OK status: {}",
+            ratingResponse.getStatus());
         throw new CodeforcesCallException(
             ratingResponse.getComment() != null ? ratingResponse.getComment()
                 : "Codeforces API returned a non-OK status: "
@@ -117,6 +123,7 @@ public final class CodeforcesClient {
       return ratingResponse;
 
     } catch (IOException e) {
+      log.error("Failed to call Codeforces API.", e);
       throw new CodeforcesCallException("Failed to call Codeforces API.", e);
     }
   }

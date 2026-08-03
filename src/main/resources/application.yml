@@ -28,3 +28,14 @@ github:
 
 profile:
   profile-json-retreival-url: ${PROFILE_JSON_RETREIVAL_URL:https://zaiwjonzbotyjmoghqzh.supabase.co/storage/v1/object/public/portfolio/profile.json}
+
+valkey:
+  host: ${VALKEY_HOST:localhost}
+  port: ${VALKEY_PORT:6379}
+  username: ${VALKEY_USERNAME:}
+  password: ${VALKEY_PASSWORD:}
+
+loki:
+  url: ${LOKI_URL:http://localhost:3100}
+  username: ${LOKI_USERNAME:}
+  password: ${LOKI_PASSWORD:}

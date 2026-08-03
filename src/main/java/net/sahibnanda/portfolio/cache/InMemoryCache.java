@@ -76,4 +76,13 @@ public final class InMemoryCache {
     Object value = entry.value();
     return type.isInstance(value) ? type.cast(value) : null;
   }
+
+  /**
+   * Removes a cached value by key.
+   *
+   * @param key the cache key
+   */
+  public void delete(final String key) {
+    cache.invalidate(key);
+  }
 }

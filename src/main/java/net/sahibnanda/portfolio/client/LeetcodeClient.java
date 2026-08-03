@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 import net.sahibnanda.portfolio.config.LeetcodeProperties;
 import net.sahibnanda.portfolio.exception.LeetcodeCallException;
 import net.sahibnanda.portfolio.models.LeetcodeUserProfileRequest;
@@ -25,6 +26,7 @@ import org.springframework.stereotype.Component;
  * Thin client over the Leetcode GraphQL API used to fetch a user's public
  * profile statistics.
  */
+@Slf4j
 @Component
 public final class LeetcodeClient {
 
@@ -116,6 +118,8 @@ public final class LeetcodeClient {
       String responseBody = body != null ? body.string() : "";
 
       if (!response.isSuccessful()) {
+        log.error("Leetcode API request failed. HTTP {}: {}", response.code(),
+            responseBody);
         throw new LeetcodeCallException(
             String.format("Leetcode API request failed. HTTP %d: %s",
                 response.code(), responseBody));
@@ -126,6 +130,7 @@ public final class LeetcodeClient {
 
       List<Map<String, Object>> errors = profileResponse.getErrors();
       if (errors != null && !errors.isEmpty()) {
+        log.error("Leetcode API returned errors: {}", errors);
         throw new LeetcodeCallException("Leetcode API returned errors: "
             + errors.stream().map(error -> String.valueOf(error.get("message")))
                 .collect(Collectors.joining("; ")));
@@ -134,6 +139,7 @@ public final class LeetcodeClient {
       return profileResponse;
 
     } catch (IOException e) {
+      log.error("Failed to call Leetcode API.", e);
       throw new LeetcodeCallException("Failed to call Leetcode API.", e);
     }
   }

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import lombok.extern.slf4j.Slf4j;
 import org.jooq.DSLContext;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -15,6 +16,7 @@ import org.springframework.util.StreamUtils;
 /**
  * Runs the database schema initialization script on application startup.
  */
+@Slf4j
 @Component
 public final class SchemaInitializer implements ApplicationRunner {
 
@@ -40,7 +42,9 @@ public final class SchemaInitializer implements ApplicationRunner {
    */
   @Override
   public void run(final ApplicationArguments args) {
+    log.info("Applying database schema.");
     dslContext.parser().parse(readSchemaScript()).executeBatch();
+    log.info("Database schema applied.");
   }
 
   private String readSchemaScript() {
@@ -48,6 +52,7 @@ public final class SchemaInitializer implements ApplicationRunner {
     try (InputStream inputStream = resource.getInputStream()) {
       return StreamUtils.copyToString(inputStream, StandardCharsets.UTF_8);
     } catch (IOException e) {
+      log.error("Failed to read schema script: {}", SCHEMA_SCRIPT_LOCATION, e);
       throw new UncheckedIOException(
           "Failed to read schema script: " + SCHEMA_SCRIPT_LOCATION, e);
     }

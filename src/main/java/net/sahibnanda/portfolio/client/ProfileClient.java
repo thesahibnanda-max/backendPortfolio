@@ -3,6 +3,7 @@ package net.sahibnanda.portfolio.client;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Objects;
+import lombok.extern.slf4j.Slf4j;
 import net.sahibnanda.portfolio.config.ProfileProperties;
 import net.sahibnanda.portfolio.exception.ProfileCallException;
 import net.sahibnanda.portfolio.models.ProfileResponse;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Component;
  * Thin client over a fixed, hosted JSON document used to fetch the portfolio
  * owner's profile details.
  */
+@Slf4j
 @Component
 public final class ProfileClient {
 
@@ -82,6 +84,8 @@ public final class ProfileClient {
       String responseBody = body != null ? body.string() : "";
 
       if (!response.isSuccessful()) {
+        log.error("Profile API request failed. HTTP {}: {}", response.code(),
+            responseBody);
         throw new ProfileCallException(
             String.format("Profile API request failed. HTTP %d: %s",
                 response.code(), responseBody));
@@ -90,6 +94,7 @@ public final class ProfileClient {
       return JsonUtils.fromJson(responseBody, ProfileResponse.class);
 
     } catch (IOException e) {
+      log.error("Failed to call Profile API.", e);
       throw new ProfileCallException("Failed to call Profile API.", e);
     }
   }
