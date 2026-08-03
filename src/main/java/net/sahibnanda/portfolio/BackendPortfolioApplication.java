@@ -4,6 +4,8 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
+import net.sahibnanda.portfolio.utils.EnvironmentUtils;
+
 @ConfigurationPropertiesScan
 @SpringBootApplication
 public final class BackendPortfolioApplication {
@@ -17,6 +19,8 @@ public final class BackendPortfolioApplication {
    * @param args the command line arguments
    */
   public static void main(final String[] args) {
+    EnvironmentUtils.loadDotenv();
+
     SpringApplication.run(BackendPortfolioApplication.class, args);
   }
 }

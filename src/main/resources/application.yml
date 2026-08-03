@@ -14,7 +14,7 @@ server:
   port: 8080
 
 groq:
-  base-url: ${GROQ_BASE_URL:https://api.groq.com/openai/v1}
+  base-url: ${GROQ_BASE_URL:https://api.groq.com}
   api-keys: ${GROQ_API_KEYS:sample-api-key-1,sample-api-key-2}
 
 leetcode:
