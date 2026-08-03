@@ -40,3 +40,8 @@ loki:
   url: ${LOKI_URL:http://localhost:3100}
   username: ${LOKI_USERNAME:}
   password: ${LOKI_PASSWORD:}
+
+details:
+  leetcode-user-names: ${DETAILS_LEETCODE_USERNAMES:imsahibnanda}
+  codeforces-user-names: ${DETAILS_CODEFORCES_USERNAMES:shisukenohara}
+  github-user-names: ${DETAILS_GITHUB_USERNAMES:thesahibnanda-max,thesahibnanda}
