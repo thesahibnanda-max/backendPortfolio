@@ -6,6 +6,7 @@ import java.util.Objects;
 import lombok.extern.slf4j.Slf4j;
 import net.sahibnanda.portfolio.config.ProfileProperties;
 import net.sahibnanda.portfolio.exception.ProfileCallException;
+import net.sahibnanda.portfolio.models.PersonalityResponse;
 import net.sahibnanda.portfolio.models.ProfileResponse;
 import net.sahibnanda.portfolio.utils.JsonUtils;
 import net.sahibnanda.portfolio.utils.StringUtils;
@@ -46,12 +47,17 @@ public final class ProfileClient {
   private final HttpUrl profileJsonUrl;
 
   /**
+   * Full URL of the hosted personality JSON, resolved from configuration.
+   */
+  private final HttpUrl personalityJsonUrl;
+
+  /**
    * Creates a client configured with the given Profile properties.
    *
    * @param properties Profile configuration; must not be {@code null}
-   * @throws IllegalStateException if the configured URL is blank
-   * @throws NullPointerException if {@code properties} is {@code null} or its
-   *         URL cannot be parsed
+   * @throws IllegalStateException if either configured URL is blank
+   * @throws NullPointerException if {@code properties} is {@code null} or
+   *         either URL cannot be parsed
    */
   public ProfileClient(final ProfileProperties properties) {
 
@@ -60,10 +66,18 @@ public final class ProfileClient {
     if (StringUtils.isEmpty(properties.profileJSONRetreivalURL())) {
       throw new IllegalStateException("Profile JSON URL is not configured.");
     }
+    if (StringUtils.isEmpty(properties.personalityJSONRetreivalURL())) {
+      throw new IllegalStateException(
+          "Personality JSON URL is not configured.");
+    }
 
     this.profileJsonUrl = Objects.requireNonNull(
         HttpUrl.parse(properties.profileJSONRetreivalURL()),
         "Invalid profile JSON URL: " + properties.profileJSONRetreivalURL());
+    this.personalityJsonUrl = Objects.requireNonNull(
+        HttpUrl.parse(properties.personalityJSONRetreivalURL()),
+        "Invalid personality JSON URL: "
+            + properties.personalityJSONRetreivalURL());
   }
 
   /**
@@ -74,9 +88,33 @@ public final class ProfileClient {
    *         non-successful HTTP status
    */
   public ProfileResponse getProfile() {
+    return JsonUtils.fromJson(fetchJson(profileJsonUrl), ProfileResponse.class);
+  }
 
-    Request httpRequest =
-        new Request.Builder().url(profileJsonUrl).get().build();
+  /**
+   * Fetches the portfolio owner's personality profile.
+   *
+   * @return the deserialized personality document
+   * @throws ProfileCallException if the request fails or the API returns a
+   *         non-successful HTTP status
+   */
+  public PersonalityResponse getPersonality() {
+    return JsonUtils.fromJson(fetchJson(personalityJsonUrl),
+        PersonalityResponse.class);
+  }
+
+  /**
+   * Sends a GET request to the given URL and returns the raw JSON response
+   * body.
+   *
+   * @param url the fully built request URL
+   * @return the raw JSON response body
+   * @throws ProfileCallException if the request fails or the API returns a
+   *         non-successful HTTP status
+   */
+  private String fetchJson(final HttpUrl url) {
+
+    Request httpRequest = new Request.Builder().url(url).get().build();
 
     try (Response response = HTTP_CLIENT.newCall(httpRequest).execute()) {
 
@@ -91,7 +129,7 @@ public final class ProfileClient {
                 response.code(), responseBody));
       }
 
-      return JsonUtils.fromJson(responseBody, ProfileResponse.class);
+      return responseBody;
 
     } catch (IOException e) {
       log.error("Failed to call Profile API.", e);

@@ -3,10 +3,12 @@ package net.sahibnanda.portfolio;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import net.sahibnanda.portfolio.utils.EnvironmentUtils;
 
 @ConfigurationPropertiesScan
+@EnableScheduling
 @SpringBootApplication
 public final class BackendPortfolioApplication {
 

@@ -28,6 +28,7 @@ github:
 
 profile:
   profile-json-retreival-url: ${PROFILE_JSON_RETREIVAL_URL:https://zaiwjonzbotyjmoghqzh.supabase.co/storage/v1/object/public/portfolio/profile.json}
+  personality-json-retreival-url: ${PERSONALITY_JSON_RETREIVAL_URL:https://zaiwjonzbotyjmoghqzh.supabase.co/storage/v1/object/public/portfolio/personality.json}
 
 valkey:
   host: ${VALKEY_HOST:localhost}

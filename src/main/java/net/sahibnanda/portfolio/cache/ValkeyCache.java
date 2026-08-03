@@ -125,6 +125,16 @@ public final class ValkeyCache {
   }
 
   /**
+   * Pings the Valkey server, useful for keeping a free-tier instance from
+   * spinning down due to inactivity, or as a lightweight health check.
+   *
+   * @throws ValkeyCacheException if the ping fails
+   */
+  public void ping() {
+    await(glideClient.ping());
+  }
+
+  /**
    * Blocks on a GLIDE command future, translating its checked exceptions into
    * {@link ValkeyCacheException}.
    *
