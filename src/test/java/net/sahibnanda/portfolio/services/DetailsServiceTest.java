@@ -2,10 +2,20 @@ package net.sahibnanda.portfolio.services;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 import net.sahibnanda.portfolio.cache.InMemoryCache;
 import net.sahibnanda.portfolio.cache.ValkeyCache;
 import net.sahibnanda.portfolio.client.CodeforcesClient;
@@ -121,5 +131,78 @@ class DetailsServiceTest {
     assertNotNull(details.getPersonalProfile());
     assertNotNull(details.getAboutMe());
     assertFalse(details.getAboutMe().isBlank());
+  }
+
+  @Test
+  void coalescesConcurrentMissesForSameKey()
+      throws InterruptedException, ExecutionException {
+    String key = "test:coalesce:" + UUID.randomUUID();
+    AtomicInteger loadCount = new AtomicInteger();
+    int callers = 20;
+    CountDownLatch ready = new CountDownLatch(callers);
+    CountDownLatch start = new CountDownLatch(1);
+
+    ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor();
+    List<Future<String>> futures = new ArrayList<>();
+    for (int i = 0; i < callers; i++) {
+      futures.add(pool.submit(() -> {
+        ready.countDown();
+        start.await();
+        return detailsService.coalesce(key, () -> {
+          loadCount.incrementAndGet();
+          try {
+            Thread.sleep(150);
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+          }
+          return "loaded-value";
+        });
+      }));
+    }
+    ready.await();
+    start.countDown();
+
+    for (Future<String> future : futures) {
+      assertEquals("\"loaded-value\"", future.get());
+    }
+    assertEquals(1, loadCount.get());
+  }
+
+  @Test
+  void propagatesLoaderFailureToAllCoalescedCallers()
+      throws InterruptedException {
+    String key = "test:coalesce-fail:" + UUID.randomUUID();
+    AtomicInteger loadCount = new AtomicInteger();
+    int callers = 10;
+    CountDownLatch ready = new CountDownLatch(callers);
+    CountDownLatch start = new CountDownLatch(1);
+
+    ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor();
+    List<Future<String>> futures = new ArrayList<>();
+    for (int i = 0; i < callers; i++) {
+      futures.add(pool.submit(() -> {
+        ready.countDown();
+        start.await();
+        return detailsService.coalesce(key, () -> {
+          loadCount.incrementAndGet();
+          try {
+            Thread.sleep(150);
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+          }
+          throw new IllegalStateException("synthetic failure");
+        });
+      }));
+    }
+    ready.await();
+    start.countDown();
+
+    for (Future<String> future : futures) {
+      ExecutionException e =
+          assertThrows(ExecutionException.class, future::get);
+      assertInstanceOf(IllegalStateException.class, e.getCause());
+      assertEquals("synthetic failure", e.getCause().getMessage());
+    }
+    assertEquals(1, loadCount.get());
   }
 }

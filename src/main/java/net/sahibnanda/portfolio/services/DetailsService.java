@@ -5,6 +5,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -44,8 +47,13 @@ import org.springframework.stereotype.Service;
 @Service
 public final class DetailsService {
 
-  /** Time-to-live, in seconds, for every cached raw response. */
-  private static final long CACHE_TTL_SECONDS = 3600;
+  /** Time-to-live, in seconds, for the local (L1) tier of a cached response. */
+  private static final long CACHE_TTL_SECONDS_L1 = 600;
+
+  /**
+   * Time-to-live, in seconds, for the shared (L2) tier of a cached response.
+   */
+  private static final long CACHE_TTL_SECONDS_L2 = 1200;
 
   /** Cache key prefix for a raw LeetCode profile response. */
   private static final String CACHE_KEY_LEETCODE_RAW_PREFIX = "leetcode:raw:";
@@ -110,6 +118,13 @@ public final class DetailsService {
   /** Executor used to run concurrent API calls and cache writes. */
   private final ExecutorService executor =
       Executors.newVirtualThreadPerTaskExecutor();
+
+  /**
+   * In-flight loads, keyed by cache key, so concurrent misses for the same key
+   * share one upstream call instead of each triggering its own.
+   */
+  private final ConcurrentHashMap<String, CompletableFuture<String>> inFlight =
+      new ConcurrentHashMap<>();
 
   /**
    * Creates a new details service.
@@ -454,9 +469,7 @@ public final class DetailsService {
       return JsonUtils.fromJson(cachedJson, type);
     }
 
-    T value = loader.get();
-    cacheAsync(key, value);
-    return value;
+    return JsonUtils.fromJson(coalesce(key, loader), type);
   }
 
   private <T> List<T> getCachedRawList(final String key,
@@ -466,16 +479,35 @@ public final class DetailsService {
       return JsonUtils.fromJson(cachedJson, type);
     }
 
-    List<T> value = loader.get();
-    cacheAsync(key, value);
-    return value;
+    return JsonUtils.fromJson(coalesce(key, loader), type);
+  }
+
+  // Package-private (not private) so DetailsServiceTest can exercise
+  // this directly with a synthetic loader -- real upstream calls can't
+  // be raced deterministically in a test.
+  <T> String coalesce(final String key, final Supplier<T> loader) {
+    CompletableFuture<String> future =
+        inFlight.computeIfAbsent(key, k -> CompletableFuture.supplyAsync(() -> {
+          T value = loader.get();
+          cacheAsync(k, value);
+          return JsonUtils.toJson(value);
+        }, executor).whenComplete((json, error) -> inFlight.remove(k)));
+
+    try {
+      return future.join();
+    } catch (CompletionException e) {
+      if (e.getCause() instanceof RuntimeException runtimeException) {
+        throw runtimeException;
+      }
+      throw e;
+    }
   }
 
   private void cacheAsync(final String key, final Object value) {
     executor.submit(() -> {
       try {
-        cache.set(key, JsonUtils.toJson(value), CACHE_TTL_SECONDS,
-            CACHE_TTL_SECONDS);
+        cache.set(key, JsonUtils.toJson(value), CACHE_TTL_SECONDS_L1,
+            CACHE_TTL_SECONDS_L2);
       } catch (RuntimeException e) {
         log.error(ERROR_CACHE_FAILED, key, e);
       }
