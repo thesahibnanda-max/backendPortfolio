@@ -4,6 +4,8 @@ spring:
   threads:
     virtual:
       enabled: true
+  jackson:
+    default-property-inclusion: non_null
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:defaultdb}?ssl=${DB_SSL_MODE:false}
     username: ${DB_USERNAME:postgres}
@@ -79,3 +81,10 @@ chat-observer:
     chat_repo_event:
       partitions: 3
       replication-factor: 1
+
+opensearch:
+  host: ${OPENSEARCH_HOST:localhost}
+  port: ${OPENSEARCH_PORT:9200}
+  username: ${OPENSEARCH_USERNAME:admin}
+  password: ${OPENSEARCH_PASSWORD:admin}
+  https: ${OPENSEARCH_HTTPS:false}
