@@ -73,3 +73,9 @@ llm:
 
 auth:
   secret-key: ${AUTH_SECRET_KEY:local-dev-only-change-me}
+
+chat-observer:
+  kafka-topics:
+    chat_repo_event:
+      partitions: 3
+      replication-factor: 1

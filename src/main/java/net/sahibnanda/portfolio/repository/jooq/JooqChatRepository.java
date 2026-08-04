@@ -5,13 +5,16 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
+import net.sahibnanda.portfolio.dto.ChatObserverDTO;
 import net.sahibnanda.portfolio.entity.ChatEntity;
 import net.sahibnanda.portfolio.entity.Message;
+import net.sahibnanda.portfolio.enums.ChatObserverStatus;
 import net.sahibnanda.portfolio.exception.ChatNotFoundException;
 import net.sahibnanda.portfolio.exception.DatabaseOperationException;
 import net.sahibnanda.portfolio.jooq.Tables;
 import net.sahibnanda.portfolio.jooq.tables.records.ChatsRecord;
 import net.sahibnanda.portfolio.repository.ChatRepository;
+import net.sahibnanda.portfolio.repository.observers.ChatRepositoryObserver;
 import net.sahibnanda.portfolio.utils.JsonUtils;
 import net.sahibnanda.portfolio.utils.StringUtils;
 import org.jooq.DSLContext;
@@ -30,13 +33,19 @@ public class JooqChatRepository implements ChatRepository {
   /** jOOQ context used to execute chat queries. */
   private final DSLContext dslContext;
 
+  /** Notified after every chat create, update, or delete. */
+  private final ChatRepositoryObserver chatRepositoryObserver;
+
   /**
    * Creates a new chat repository.
    *
    * @param jooqDslContext the jOOQ context used to execute queries
+   * @param observer notified after every chat create, update, or delete
    */
-  public JooqChatRepository(final DSLContext jooqDslContext) {
+  public JooqChatRepository(final DSLContext jooqDslContext,
+      final ChatRepositoryObserver observer) {
     this.dslContext = jooqDslContext;
+    this.chatRepositoryObserver = observer;
   }
 
   /**
@@ -72,9 +81,15 @@ public class JooqChatRepository implements ChatRepository {
       throw new DatabaseOperationException("Failed to create chat: " + chatId,
           e);
     }
-    return ChatEntity.builder().chatId(chatId).username(username)
+    ChatEntity created = ChatEntity.builder().chatId(chatId).username(username)
         .chatTitle(chatTitle).messages(sortedMessages).createdAt(now)
         .updatedAt(now).build();
+    chatRepositoryObserver.notifyAllObservers(ChatObserverDTO.builder()
+        .chatId(created.getChatId()).username(created.getUsername())
+        .chatTitle(created.getChatTitle()).messages(created.getMessages())
+        .createdAt(created.getCreatedAt()).updatedAt(created.getUpdatedAt())
+        .status(ChatObserverStatus.CHAT_CREATED).build());
+    return created;
   }
 
   /**
@@ -129,11 +144,13 @@ public class JooqChatRepository implements ChatRepository {
   @Override
   public void saveMessages(final String chatId, final List<Message> messages) {
     List<Message> sortedMessages = Message.sortedByTimestamp(messages);
+    // Use LocalDateTime.now() for timestamping purposes
+    LocalDateTime now = LocalDateTime.now();
     int updated;
     try {
       updated = dslContext.update(Tables.CHATS)
           .set(Tables.CHATS.MESSAGES, serializeMessages(sortedMessages))
-          .set(Tables.CHATS.UPDATED_AT, LocalDateTime.now())
+          .set(Tables.CHATS.UPDATED_AT, now)
           .where(Tables.CHATS.CHAT_ID.eq(chatId)).execute();
     } catch (org.jooq.exception.DataAccessException | DataAccessException e) {
       log.error("Failed to save messages for chat: {}", chatId, e);
@@ -143,6 +160,9 @@ public class JooqChatRepository implements ChatRepository {
     if (updated == 0) {
       throw new ChatNotFoundException(chatId);
     }
+    chatRepositoryObserver.notifyAllObservers(ChatObserverDTO.builder()
+        .chatId(chatId).messages(sortedMessages).updatedAt(now)
+        .status(ChatObserverStatus.CHAT_MESSAGE_SAVED).build());
   }
 
   /**
@@ -166,6 +186,8 @@ public class JooqChatRepository implements ChatRepository {
     if (deleted == 0) {
       throw new ChatNotFoundException(chatId);
     }
+    chatRepositoryObserver.notifyAllObservers(ChatObserverDTO.builder()
+        .chatId(chatId).status(ChatObserverStatus.CHAT_DELETED).build());
   }
 
   /**
@@ -178,12 +200,13 @@ public class JooqChatRepository implements ChatRepository {
    */
   @Override
   public void updateChatTitle(final String chatId, final String title) {
+    // Use LocalDateTime.now() for timestamping purposes
+    LocalDateTime now = LocalDateTime.now();
     int updated;
     try {
-      updated =
-          dslContext.update(Tables.CHATS).set(Tables.CHATS.CHAT_TITLE, title)
-              .set(Tables.CHATS.UPDATED_AT, LocalDateTime.now())
-              .where(Tables.CHATS.CHAT_ID.eq(chatId)).execute();
+      updated = dslContext.update(Tables.CHATS)
+          .set(Tables.CHATS.CHAT_TITLE, title).set(Tables.CHATS.UPDATED_AT, now)
+          .where(Tables.CHATS.CHAT_ID.eq(chatId)).execute();
     } catch (org.jooq.exception.DataAccessException | DataAccessException e) {
       log.error("Failed to update title for chat: {}", chatId, e);
       throw new DatabaseOperationException(
@@ -192,6 +215,9 @@ public class JooqChatRepository implements ChatRepository {
     if (updated == 0) {
       throw new ChatNotFoundException(chatId);
     }
+    chatRepositoryObserver.notifyAllObservers(
+        ChatObserverDTO.builder().chatId(chatId).chatTitle(title).updatedAt(now)
+            .status(ChatObserverStatus.CHAT_TITLE_UPDATED).build());
   }
 
   private ChatEntity toEntity(final ChatsRecord chatRecord) {
