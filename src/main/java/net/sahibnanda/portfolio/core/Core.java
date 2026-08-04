@@ -15,6 +15,8 @@ import net.sahibnanda.portfolio.exception.InvalidCredentialsException;
 import net.sahibnanda.portfolio.exception.InvalidEmailException;
 import net.sahibnanda.portfolio.exception.InvalidPasswordException;
 import net.sahibnanda.portfolio.exception.JsonExtractionException;
+import net.sahibnanda.portfolio.exception.KafkaConsumerAlreadyStartedException;
+import net.sahibnanda.portfolio.exception.KafkaOperationException;
 import net.sahibnanda.portfolio.exception.LeetcodeCallException;
 import net.sahibnanda.portfolio.exception.ProfileCallException;
 import net.sahibnanda.portfolio.exception.RateLimitExceededException;
@@ -412,6 +414,8 @@ public class Core {
       // Internal failures: known cause, message not safe to expose.
       case DatabaseOperationException _ -> genericError();
       case ValkeyCacheException _ -> genericError();
+      case KafkaOperationException _ -> genericError();
+      case KafkaConsumerAlreadyStartedException _ -> genericError();
       case CacheSetException _ -> genericError();
       case JsonExtractionException _ -> genericError();
 
