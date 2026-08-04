@@ -30,6 +30,15 @@ public final class TestEnvironment {
       Integer.parseInt(resolve("valkey.port"));
   public static final String KAFKA_BOOTSTRAP_SERVERS =
       resolve("spring.kafka.bootstrap-servers");
+  public static final String OPENSEARCH_HOST = resolve("opensearch.host");
+  public static final int OPENSEARCH_PORT =
+      Integer.parseInt(resolve("opensearch.port"));
+  public static final String OPENSEARCH_USERNAME =
+      resolve("opensearch.username");
+  public static final String OPENSEARCH_PASSWORD =
+      resolve("opensearch.password");
+  public static final boolean OPENSEARCH_HTTPS =
+      Boolean.parseBoolean(resolve("opensearch.https"));
 
   private static StandardEnvironment load() {
     YamlPropertySourceLoader loader = new YamlPropertySourceLoader();

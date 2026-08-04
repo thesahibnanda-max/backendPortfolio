@@ -18,6 +18,7 @@ import net.sahibnanda.portfolio.exception.JsonExtractionException;
 import net.sahibnanda.portfolio.exception.KafkaConsumerAlreadyStartedException;
 import net.sahibnanda.portfolio.exception.KafkaOperationException;
 import net.sahibnanda.portfolio.exception.LeetcodeCallException;
+import net.sahibnanda.portfolio.exception.OpenSearchOperationException;
 import net.sahibnanda.portfolio.exception.ProfileCallException;
 import net.sahibnanda.portfolio.exception.RateLimitExceededException;
 import net.sahibnanda.portfolio.exception.RepositoryException;
@@ -416,6 +417,7 @@ public class Core {
       case ValkeyCacheException _ -> genericError();
       case KafkaOperationException _ -> genericError();
       case KafkaConsumerAlreadyStartedException _ -> genericError();
+      case OpenSearchOperationException _ -> genericError();
       case CacheSetException _ -> genericError();
       case JsonExtractionException _ -> genericError();
 

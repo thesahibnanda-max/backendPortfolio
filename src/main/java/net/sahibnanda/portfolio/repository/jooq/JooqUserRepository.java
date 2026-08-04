@@ -3,13 +3,16 @@ package net.sahibnanda.portfolio.repository.jooq;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
+import net.sahibnanda.portfolio.dto.UserObserverDTO;
 import net.sahibnanda.portfolio.entity.UserEntity;
+import net.sahibnanda.portfolio.enums.UserObserverStatus;
 import net.sahibnanda.portfolio.exception.DatabaseOperationException;
 import net.sahibnanda.portfolio.exception.DuplicateUsernameException;
 import net.sahibnanda.portfolio.exception.UserNotFoundException;
 import net.sahibnanda.portfolio.jooq.Tables;
 import net.sahibnanda.portfolio.jooq.tables.records.UsersRecord;
 import net.sahibnanda.portfolio.repository.UserRepository;
+import net.sahibnanda.portfolio.repository.observers.UserRepositoryObserver;
 import org.jooq.DSLContext;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
@@ -24,13 +27,19 @@ public class JooqUserRepository implements UserRepository {
   /** jOOQ context used to execute user queries. */
   private final DSLContext dslContext;
 
+  /** Notified after every successful user write. */
+  private final UserRepositoryObserver userRepositoryObserver;
+
   /**
    * Creates a new user repository.
    *
    * @param jooqDslContext the jOOQ context used to execute queries
+   * @param observer notified after every successful user write
    */
-  public JooqUserRepository(final DSLContext jooqDslContext) {
+  public JooqUserRepository(final DSLContext jooqDslContext,
+      final UserRepositoryObserver observer) {
     this.dslContext = jooqDslContext;
+    this.userRepositoryObserver = observer;
   }
 
   /**
@@ -57,6 +66,9 @@ public class JooqUserRepository implements UserRepository {
       throw new DatabaseOperationException("Failed to create user: " + username,
           e);
     }
+    userRepositoryObserver.notifyAllObservers(
+        UserObserverDTO.builder().username(username).createdAt(createdAt)
+            .status(UserObserverStatus.USER_CREATED).build());
     return new UserEntity(username, hashedPassword, createdAt);
   }
 
@@ -122,6 +134,8 @@ public class JooqUserRepository implements UserRepository {
     if (deleted == 0) {
       throw new UserNotFoundException(username);
     }
+    userRepositoryObserver.notifyAllObservers(UserObserverDTO.builder()
+        .username(username).status(UserObserverStatus.USER_DELETED).build());
   }
 
   /**
@@ -148,6 +162,9 @@ public class JooqUserRepository implements UserRepository {
     if (updated == 0) {
       throw new UserNotFoundException(username);
     }
+    userRepositoryObserver
+        .notifyAllObservers(UserObserverDTO.builder().username(username)
+            .status(UserObserverStatus.USER_PASSWORD_UPDATED).build());
   }
 
   private UserEntity toEntity(final UsersRecord userRecord) {
