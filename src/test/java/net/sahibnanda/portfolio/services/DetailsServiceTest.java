@@ -33,6 +33,7 @@ import net.sahibnanda.portfolio.objects.GitHubDetails;
 import net.sahibnanda.portfolio.objects.LeetcodeDetails;
 import net.sahibnanda.portfolio.objects.PersonalityDetails;
 import net.sahibnanda.portfolio.objects.ProfileDetails;
+import net.sahibnanda.portfolio.utils.TestEnvironment;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -46,19 +47,18 @@ class DetailsServiceTest {
         new DetailsProperties(List.of("imsahibnanda"), List.of("shisukenohara"),
             List.of("thesahibnanda-max", "thesahibnanda"));
 
-    LeetcodeClient leetcodeClient =
-        new LeetcodeClient(new LeetcodeProperties("https://leetcode.com"));
+    LeetcodeClient leetcodeClient = new LeetcodeClient(
+        new LeetcodeProperties(TestEnvironment.LEETCODE_BASE_URL));
     CodeforcesClient codeforcesClient = new CodeforcesClient(
-        new CodeforcesProperties("https://codeforces.com"));
+        new CodeforcesProperties(TestEnvironment.CODEFORCES_BASE_URL));
     GitHubClient gitHubClient =
-        new GitHubClient(new GitHubProperties("https://api.github.com"));
-    ProfileClient profileClient = new ProfileClient(new ProfileProperties(
-        "https://zaiwjonzbotyjmoghqzh.supabase.co/storage/v1/object/"
-            + "public/portfolio/profile.json",
-        "https://zaiwjonzbotyjmoghqzh.supabase.co/storage/v1/object/"
-            + "public/portfolio/personality.json"));
+        new GitHubClient(new GitHubProperties(TestEnvironment.GITHUB_BASE_URL));
+    ProfileClient profileClient = new ProfileClient(
+        new ProfileProperties(TestEnvironment.PROFILE_JSON_RETRIEVAL_URL,
+            TestEnvironment.PERSONALITY_JSON_RETRIEVAL_URL));
     CacheService cacheService = new CacheService(new InMemoryCache(),
-        new ValkeyCache(new ValkeyProperties("localhost", 6379, null, null)));
+        new ValkeyCache(new ValkeyProperties(TestEnvironment.VALKEY_HOST,
+            TestEnvironment.VALKEY_PORT, null, null)));
 
     detailsService = new DetailsService(detailsProperties, leetcodeClient,
         codeforcesClient, gitHubClient, profileClient, cacheService);

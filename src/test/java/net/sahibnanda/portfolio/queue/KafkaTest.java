@@ -11,6 +11,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.sahibnanda.portfolio.exception.KafkaConsumerAlreadyStartedException;
+import net.sahibnanda.portfolio.utils.TestEnvironment;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -31,7 +32,8 @@ import org.springframework.kafka.support.serializer.JsonSerializer;
 
 class KafkaTest {
 
-  private static final String BOOTSTRAP_SERVERS = "localhost:9092";
+  private static final String BOOTSTRAP_SERVERS =
+      TestEnvironment.KAFKA_BOOTSTRAP_SERVERS;
 
   private static ProducerFactory<String, Object> producerFactory;
 

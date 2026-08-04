@@ -25,6 +25,7 @@ import net.sahibnanda.portfolio.enums.GroqModel;
 import net.sahibnanda.portfolio.templates.PromptTemplates;
 import net.sahibnanda.portfolio.utils.EnvironmentUtils;
 import net.sahibnanda.portfolio.utils.StringUtils;
+import net.sahibnanda.portfolio.utils.TestEnvironment;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -42,7 +43,7 @@ class WorkerServiceTest {
         "GROQ_API_KEYS not configured; skipping live Groq API test.");
 
     GroqClient groqClient =
-        new GroqClient(new GroqProperties("https://api.groq.com",
+        new GroqClient(new GroqProperties(TestEnvironment.GROQ_BASE_URL,
             List.of(apiKeys.split(","))));
     LLMProperties llmProperties = new LLMProperties(
         Map.of(GroqModel.LLAMA_3_3_70B, 50, GroqModel.GPT_OSS_20B, 20,
@@ -53,19 +54,18 @@ class WorkerServiceTest {
     DetailsProperties detailsProperties =
         new DetailsProperties(List.of("imsahibnanda"), List.of("shisukenohara"),
             List.of("thesahibnanda-max", "thesahibnanda"));
-    LeetcodeClient leetcodeClient =
-        new LeetcodeClient(new LeetcodeProperties("https://leetcode.com"));
+    LeetcodeClient leetcodeClient = new LeetcodeClient(
+        new LeetcodeProperties(TestEnvironment.LEETCODE_BASE_URL));
     CodeforcesClient codeforcesClient = new CodeforcesClient(
-        new CodeforcesProperties("https://codeforces.com"));
+        new CodeforcesProperties(TestEnvironment.CODEFORCES_BASE_URL));
     GitHubClient gitHubClient =
-        new GitHubClient(new GitHubProperties("https://api.github.com"));
-    ProfileClient profileClient = new ProfileClient(new ProfileProperties(
-        "https://zaiwjonzbotyjmoghqzh.supabase.co/storage/v1/object/"
-            + "public/portfolio/profile.json",
-        "https://zaiwjonzbotyjmoghqzh.supabase.co/storage/v1/object/"
-            + "public/portfolio/personality.json"));
+        new GitHubClient(new GitHubProperties(TestEnvironment.GITHUB_BASE_URL));
+    ProfileClient profileClient = new ProfileClient(
+        new ProfileProperties(TestEnvironment.PROFILE_JSON_RETRIEVAL_URL,
+            TestEnvironment.PERSONALITY_JSON_RETRIEVAL_URL));
     CacheService cacheService = new CacheService(new InMemoryCache(),
-        new ValkeyCache(new ValkeyProperties("localhost", 6379, null, null)));
+        new ValkeyCache(new ValkeyProperties(TestEnvironment.VALKEY_HOST,
+            TestEnvironment.VALKEY_PORT, null, null)));
     DetailsService detailsService =
         new DetailsService(detailsProperties, leetcodeClient, codeforcesClient,
             gitHubClient, profileClient, cacheService);

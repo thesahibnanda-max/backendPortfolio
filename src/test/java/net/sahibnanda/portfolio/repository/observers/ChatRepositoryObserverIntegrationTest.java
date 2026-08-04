@@ -6,6 +6,7 @@ import com.github.f4b6a3.ulid.UlidCreator;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import net.sahibnanda.portfolio.config.ChatObserverProperties;
 import net.sahibnanda.portfolio.dto.ChatObserverDTO;
 import net.sahibnanda.portfolio.enums.ChatObserverStatus;
 import net.sahibnanda.portfolio.repository.AbstractRepositoryIntegrationTest;
@@ -20,20 +21,23 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
 
 class ChatRepositoryObserverIntegrationTest
     extends AbstractRepositoryIntegrationTest {
-
-  private static final String TOPIC = "chat_repo_event";
-
-  private static final String BOOTSTRAP_SERVERS = "localhost:9092";
 
   @Autowired
   private JooqChatRepository chatRepository;
 
   @Autowired
   private UserRepository userRepository;
+
+  @Autowired
+  private KafkaProperties kafkaProperties;
+
+  @Autowired
+  private ChatObserverProperties chatObserverProperties;
 
   @BeforeEach
   void createOwningUser() {
@@ -69,14 +73,17 @@ class ChatRepositoryObserverIntegrationTest
         new JsonDeserializer<>(ChatObserverDTO.class);
     valueDeserializer.addTrustedPackages("*");
     Map<String, Object> props = Map.of(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
-        BOOTSTRAP_SERVERS, ConsumerConfig.GROUP_ID_CONFIG,
+        String.join(",", kafkaProperties.getBootstrapServers()),
+        ConsumerConfig.GROUP_ID_CONFIG,
         "chat-observer-test-" + UlidCreator.getUlid(),
         ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest",
         ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+    String topic =
+        chatObserverProperties.kafkaTopics().keySet().iterator().next();
 
     try (KafkaConsumer<String, ChatObserverDTO> consumer = new KafkaConsumer<>(
         props, new StringDeserializer(), valueDeserializer)) {
-      consumer.subscribe(List.of(TOPIC));
+      consumer.subscribe(List.of(topic));
       long deadline = System.currentTimeMillis() + 10_000;
       while (System.currentTimeMillis() < deadline) {
         ConsumerRecords<String, ChatObserverDTO> records =

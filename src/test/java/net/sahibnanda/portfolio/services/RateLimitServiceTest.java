@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import net.sahibnanda.portfolio.cache.ValkeyCache;
 import net.sahibnanda.portfolio.config.ValkeyProperties;
+import net.sahibnanda.portfolio.utils.TestEnvironment;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -15,7 +16,8 @@ class RateLimitServiceTest {
   @BeforeAll
   static void setup() {
     ValkeyCache valkeyCache =
-        new ValkeyCache(new ValkeyProperties("localhost", 6379, null, null));
+        new ValkeyCache(new ValkeyProperties(TestEnvironment.VALKEY_HOST,
+            TestEnvironment.VALKEY_PORT, null, null));
     rateLimitService = new RateLimitService(valkeyCache);
   }
 

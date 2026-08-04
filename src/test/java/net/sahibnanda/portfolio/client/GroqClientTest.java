@@ -9,6 +9,7 @@ import net.sahibnanda.portfolio.models.GroqCallRequest;
 import net.sahibnanda.portfolio.models.GroqCallResponse;
 import net.sahibnanda.portfolio.utils.EnvironmentUtils;
 import net.sahibnanda.portfolio.utils.StringUtils;
+import net.sahibnanda.portfolio.utils.TestEnvironment;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -31,8 +32,9 @@ class GroqClientTest {
     assumeTrue(!StringUtils.isEmpty(apiKeys),
         "GROQ_API_KEYS not configured; skipping live Groq API test.");
 
-    groqClient = new GroqClient(new GroqProperties("https://api.groq.com",
-        List.of(apiKeys.split(","))));
+    groqClient =
+        new GroqClient(new GroqProperties(TestEnvironment.GROQ_BASE_URL,
+            List.of(apiKeys.split(","))));
   }
 
   @Test

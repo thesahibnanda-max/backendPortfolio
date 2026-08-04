@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import net.sahibnanda.portfolio.config.ProfileProperties;
 import net.sahibnanda.portfolio.models.PersonalityResponse;
 import net.sahibnanda.portfolio.models.ProfileResponse;
+import net.sahibnanda.portfolio.utils.TestEnvironment;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -17,11 +18,9 @@ class ProfileClientTest {
 
   @BeforeAll
   static void setup() {
-    profileClient = new ProfileClient(new ProfileProperties(
-        "https://zaiwjonzbotyjmoghqzh.supabase.co/storage/v1/object/"
-            + "public/portfolio/profile.json",
-        "https://zaiwjonzbotyjmoghqzh.supabase.co/storage/v1/object/"
-            + "public/portfolio/personality.json"));
+    profileClient = new ProfileClient(
+        new ProfileProperties(TestEnvironment.PROFILE_JSON_RETRIEVAL_URL,
+            TestEnvironment.PERSONALITY_JSON_RETRIEVAL_URL));
   }
 
   @Test

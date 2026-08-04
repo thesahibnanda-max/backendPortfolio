@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import net.sahibnanda.portfolio.config.LeetcodeProperties;
 import net.sahibnanda.portfolio.models.LeetcodeUserProfileRequest;
 import net.sahibnanda.portfolio.models.LeetcodeUserProfileResponse;
+import net.sahibnanda.portfolio.utils.TestEnvironment;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -17,8 +18,8 @@ class LeetcodeClientTest {
 
   @BeforeAll
   static void setup() {
-    leetcodeClient =
-        new LeetcodeClient(new LeetcodeProperties("https://leetcode.com"));
+    leetcodeClient = new LeetcodeClient(
+        new LeetcodeProperties(TestEnvironment.LEETCODE_BASE_URL));
   }
 
   @Test

@@ -10,6 +10,7 @@ import net.sahibnanda.portfolio.config.GitHubProperties;
 import net.sahibnanda.portfolio.models.GitHubCommit;
 import net.sahibnanda.portfolio.models.GitHubRepository;
 import net.sahibnanda.portfolio.models.GitHubUser;
+import net.sahibnanda.portfolio.utils.TestEnvironment;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -20,7 +21,7 @@ class GitHubClientTest {
   @BeforeAll
   static void setup() {
     gitHubClient =
-        new GitHubClient(new GitHubProperties("https://api.github.com"));
+        new GitHubClient(new GitHubProperties(TestEnvironment.GITHUB_BASE_URL));
   }
 
   @Test

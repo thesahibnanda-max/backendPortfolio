@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import net.sahibnanda.portfolio.config.CodeforcesProperties;
 import net.sahibnanda.portfolio.models.CodeforcesUserRatingResponse;
+import net.sahibnanda.portfolio.utils.TestEnvironment;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -16,7 +17,7 @@ class CodeforcesClientTest {
   @BeforeAll
   static void setup() {
     codeforcesClient = new CodeforcesClient(
-        new CodeforcesProperties("https://codeforces.com"));
+        new CodeforcesProperties(TestEnvironment.CODEFORCES_BASE_URL));
   }
 
   @Test

@@ -12,6 +12,7 @@ import net.sahibnanda.portfolio.enums.GroqModel;
 import net.sahibnanda.portfolio.options.LLMCallOptions;
 import net.sahibnanda.portfolio.utils.EnvironmentUtils;
 import net.sahibnanda.portfolio.utils.StringUtils;
+import net.sahibnanda.portfolio.utils.TestEnvironment;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -29,7 +30,7 @@ class LLMServiceTest {
         "GROQ_API_KEYS not configured; skipping live Groq API test.");
 
     GroqClient groqClient =
-        new GroqClient(new GroqProperties("https://api.groq.com",
+        new GroqClient(new GroqProperties(TestEnvironment.GROQ_BASE_URL,
             List.of(apiKeys.split(","))));
     LLMProperties llmProperties = new LLMProperties(
         Map.of(GroqModel.LLAMA_3_3_70B, 50, GroqModel.GPT_OSS_20B, 20,
