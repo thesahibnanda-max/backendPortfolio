@@ -48,6 +48,7 @@ public final class ValkeyCache {
     // startup rather than surfacing only on first use.
     GlideClientConfiguration config = GlideClientConfiguration.builder()
         .address(address).credentials(buildCredentials(valkeyProperties))
+        .useTLS(Boolean.TRUE.equals(valkeyProperties.useTls()))
         .lazyConnect(true).build();
 
     this.glideClient = await(GlideClient.createClient(config));

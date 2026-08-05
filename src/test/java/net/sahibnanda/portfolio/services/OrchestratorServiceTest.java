@@ -72,7 +72,8 @@ class OrchestratorServiceTest {
             TestEnvironment.PERSONALITY_JSON_RETRIEVAL_URL));
     CacheService cacheService = new CacheService(new InMemoryCache(),
         new ValkeyCache(new ValkeyProperties(TestEnvironment.VALKEY_HOST,
-            TestEnvironment.VALKEY_PORT, null, null)));
+            TestEnvironment.VALKEY_PORT, null, null,
+            TestEnvironment.VALKEY_USE_TLS)));
     DetailsService detailsService =
         new DetailsService(detailsProperties, leetcodeClient, codeforcesClient,
             gitHubClient, profileClient, cacheService);

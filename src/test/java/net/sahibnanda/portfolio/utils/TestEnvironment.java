@@ -28,6 +28,8 @@ public final class TestEnvironment {
   public static final String VALKEY_HOST = resolve("valkey.host");
   public static final int VALKEY_PORT =
       Integer.parseInt(resolve("valkey.port"));
+  public static final boolean VALKEY_USE_TLS =
+      Boolean.parseBoolean(resolve("valkey.use-tls"));
   public static final String KAFKA_BOOTSTRAP_SERVERS =
       resolve("spring.kafka.bootstrap-servers");
   public static final String OPENSEARCH_HOST = resolve("opensearch.host");

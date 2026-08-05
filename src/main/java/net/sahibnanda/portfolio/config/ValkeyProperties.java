@@ -11,8 +11,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *        unauthenticated
  * @param password password for Valkey authentication, or blank if
  *        unauthenticated
+ * @param useTls whether to connect over TLS
  */
 @ConfigurationProperties(prefix = "valkey")
 public record ValkeyProperties(String host, Integer port, String username,
-    String password) {
+    String password, Boolean useTls) {
 }

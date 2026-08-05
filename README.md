@@ -101,6 +101,7 @@ suitable for local development. Set them via `prod.env` (or your own
 | `VALKEY_PORT` | `6379` | Valkey port |
 | `VALKEY_USERNAME` | *(none)* | Valkey username, if auth is enabled |
 | `VALKEY_PASSWORD` | *(none)* | Valkey password, if auth is enabled |
+| `VALKEY_USE_TLS` | `false` | Whether to connect to Valkey over TLS -- most managed Valkey/Redis providers (e.g. Aiven) require this |
 | `LOKI_URL` | `http://localhost:3100` | Loki push endpoint for logs |
 | `LOKI_USERNAME` | *(none)* | Loki basic-auth username |
 | `LOKI_PASSWORD` | *(none)* | Loki basic-auth password |
@@ -152,6 +153,16 @@ docker run -p 8080:8080 --env-file .env backend-portfolio
 # e.g. for a staging deploy:
 docker run -p 8080:8080 --env-file stage.env backend-portfolio
 ```
+
+If you're pointing the container at the infra containers from
+["Running the required infrastructure"](#running-the-required-infrastructure)
+above, `localhost` in your env file won't work -- inside the app's own
+container, `localhost` means the container itself, not your host machine.
+Use `host.docker.internal` instead (Docker Desktop resolves this to the
+host automatically), e.g. `DB_HOST=host.docker.internal`,
+`VALKEY_HOST=host.docker.internal`,
+`KAFKA_BOOTSTRAP_SERVERS=host.docker.internal:9092`,
+`OPENSEARCH_HOST=host.docker.internal`.
 
 ## Running the tests
 

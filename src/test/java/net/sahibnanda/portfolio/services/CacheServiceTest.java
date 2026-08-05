@@ -18,7 +18,8 @@ class CacheServiceTest {
   static void setup() {
     valkeyCache =
         new ValkeyCache(new ValkeyProperties(TestEnvironment.VALKEY_HOST,
-            TestEnvironment.VALKEY_PORT, null, null));
+            TestEnvironment.VALKEY_PORT, null, null,
+            TestEnvironment.VALKEY_USE_TLS));
     cacheService = new CacheService(new InMemoryCache(), valkeyCache);
   }
 

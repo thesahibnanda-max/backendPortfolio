@@ -57,6 +57,7 @@ valkey:
   port: ${VALKEY_PORT:6379}
   username: ${VALKEY_USERNAME:}
   password: ${VALKEY_PASSWORD:}
+  use-tls: ${VALKEY_USE_TLS:false}
 
 loki:
   url: ${LOKI_URL:http://localhost:3100}
