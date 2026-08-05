@@ -42,3 +42,8 @@ logs/
 .env
 .env.*
 *.env
+
+# TLS certificates/keys (e.g. a Kafka provider's CA cert)
+*.pem
+*.crt
+*.key

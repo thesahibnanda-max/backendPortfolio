@@ -87,6 +87,11 @@ suitable for local development. Set them via `prod.env` (or your own
 | `DB_PASSWORD` | `root` | Postgres password |
 | `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Kafka broker address |
 | `KAFKA_CONSUMER_GROUP_ID` | `backend-portfolio` | Base Kafka consumer group id |
+| `KAFKA_SECURITY_PROTOCOL` | `PLAINTEXT` | Kafka security protocol -- `PLAINTEXT` for the local dev broker, `SASL_SSL` (or `SASL_PLAINTEXT`) in prod |
+| `KAFKA_SASL_MECHANISM` | *(none)* | SASL mechanism, e.g. `PLAIN`, `SCRAM-SHA-256`, `SCRAM-SHA-512` -- required when `KAFKA_SECURITY_PROTOCOL` is a SASL variant |
+| `KAFKA_SASL_JAAS_CONFIG` | *(none)* | Full JAAS config string from your Kafka provider, e.g. `org.apache.kafka.common.security.plain.PlainLoginModule required username="..." password="...";` -- required when `KAFKA_SECURITY_PROTOCOL` is a SASL variant |
+| `KAFKA_SSL_TRUSTSTORE_LOCATION` | *(none)* | Filesystem path to the CA cert your Kafka provider gave you -- only needed if that CA isn't publicly trusted. Drop the file at the project root (e.g. `ca.pem`, gitignored) and point this at that same relative path; it works unchanged whether run via `mvn spring-boot:run` or `java -jar`, since Kafka reads it as a raw file, not a classpath resource |
+| `KAFKA_SSL_TRUSTSTORE_TYPE` | *(none)* | Truststore format, e.g. `PEM` -- required alongside `KAFKA_SSL_TRUSTSTORE_LOCATION` |
 | `OPENSEARCH_HOST` | `localhost` | OpenSearch host |
 | `OPENSEARCH_PORT` | `9200` | OpenSearch port |
 | `OPENSEARCH_USERNAME` | `admin` | OpenSearch username |

@@ -14,6 +14,13 @@ spring:
     sql-dialect: POSTGRES
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    security:
+      protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
+    properties:
+      sasl.mechanism: ${KAFKA_SASL_MECHANISM:}
+      sasl.jaas.config: ${KAFKA_SASL_JAAS_CONFIG:}
+      ssl.truststore.location: ${KAFKA_SSL_TRUSTSTORE_LOCATION:}
+      ssl.truststore.type: ${KAFKA_SSL_TRUSTSTORE_TYPE:}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -97,5 +104,5 @@ opensearch:
 
 search-service:
   chat-index-name: chat_index_document
-  chat-number-of-shards: 3
+  chat-number-of-shards: 2
   chat-number-of-replicas: 1
