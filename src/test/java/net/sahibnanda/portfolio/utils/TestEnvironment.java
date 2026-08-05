@@ -25,6 +25,10 @@ public final class TestEnvironment {
       resolve("profile.profile-json-retreival-url");
   public static final String PERSONALITY_JSON_RETRIEVAL_URL =
       resolve("profile.personality-json-retreival-url");
+  public static final String DETAILS_LEETCODE_PROFILE_URL_FORMAT =
+      resolve("details.leetcode-profile-url-format");
+  public static final String DETAILS_CODEFORCES_PROFILE_URL_FORMAT =
+      resolve("details.codeforces-profile-url-format");
 
   private static StandardEnvironment load() {
     YamlPropertySourceLoader loader = new YamlPropertySourceLoader();

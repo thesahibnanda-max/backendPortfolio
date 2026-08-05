@@ -68,6 +68,10 @@ details:
   leetcode-user-names: ${DETAILS_LEETCODE_USERNAMES:imsahibnanda}
   codeforces-user-names: ${DETAILS_CODEFORCES_USERNAMES:shisukenohara}
   github-user-names: ${DETAILS_GITHUB_USERNAMES:thesahibnanda-max,thesahibnanda}
+  resume-link: ${RESUME_LINK:https://zaiwjonzbotyjmoghqzh.supabase.co/storage/v1/object/public/portfolio/Sahib_Nanda_Resume.pdf}
+  profile-photo-links: ${DETAILS_PROFILE_PHOTO_LINKS:https://zaiwjonzbotyjmoghqzh.supabase.co/storage/v1/object/public/portfolio/ProPic1.png,https://zaiwjonzbotyjmoghqzh.supabase.co/storage/v1/object/public/portfolio/ProPic2.png}
+  leetcode-profile-url-format: ${DETAILS_LEETCODE_PROFILE_URL_FORMAT:%s/u/%s/}
+  codeforces-profile-url-format: ${DETAILS_CODEFORCES_PROFILE_URL_FORMAT:%s/profile/%s}
 
 llm:
   model-weights:

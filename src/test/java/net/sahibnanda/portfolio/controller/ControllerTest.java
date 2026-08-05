@@ -149,6 +149,14 @@ class ControllerTest extends AbstractRepositoryIntegrationTest {
     mockMvc.perform(get("/health")).andExpect(status().isOk());
   }
 
+  @Test
+  void professionalDetailsReturnsOk() throws Exception {
+    valkeyCache.delete("professionalDetails");
+
+    mockMvc.perform(get("/details/professional")).andExpect(status().isOk())
+        .andExpect(jsonPath("$.professionalDetails.resumeLink").exists());
+  }
+
   // Indexing into OpenSearch happens asynchronously via Kafka after chat
   // creation returns, so a search immediately afterward can miss it -- poll
   // until a match shows up or the deadline passes. /chats/search is

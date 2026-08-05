@@ -119,6 +119,10 @@ suitable for local development. Set them via `prod.env` (or your own
 | `DETAILS_LEETCODE_USERNAMES` | `imsahibnanda` | LeetCode username(s) `DetailsService` fetches profile data for -- feeds the `LEETCODE` context domain the Orchestrator/Worker AI can draw on |
 | `DETAILS_CODEFORCES_USERNAMES` | `shisukenohara` | Codeforces username(s) -- feeds the `CODEFORCES` context domain |
 | `DETAILS_GITHUB_USERNAMES` | `thesahibnanda-max,thesahibnanda` | GitHub username(s) -- feeds the `GITHUB` context domain |
+| `RESUME_LINK` | Supabase storage URL | URL of the resume returned by `GET /details/professional` |
+| `DETAILS_PROFILE_PHOTO_LINKS` | Supabase storage URLs | Comma-separated profile photo URL(s) returned by `GET /details/professional` |
+| `DETAILS_LEETCODE_PROFILE_URL_FORMAT` | `%s/u/%s/` | `String.format` pattern (base URL, username) used to build each public LeetCode profile link -- the LeetCode API has no self-referential profile URL to read instead |
+| `DETAILS_CODEFORCES_PROFILE_URL_FORMAT` | `%s/profile/%s` | `String.format` pattern (base URL, handle) used to build each public Codeforces profile link, same reasoning as above |
 
 ## Build & run
 

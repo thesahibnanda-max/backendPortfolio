@@ -4,10 +4,10 @@ Base URL (local): `http://localhost:8080`. No class-level path prefix --
 every endpoint is at the exact path shown below.
 
 All request/response bodies are JSON, `camelCase` field names. All
-non-Gate endpoints (everything except `/signup`, `/login`, `/health`)
-require an `X-Auth-Token` header -- obtained from the `X-Auth-Token`
-**response header** of `/signup` or `/login` (the token is never returned
-in a response body).
+non-Gate endpoints (everything except `/signup`, `/login`, `/health`, and
+`/details/professional`) require an `X-Auth-Token` header -- obtained from
+the `X-Auth-Token` **response header** of `/signup` or `/login` (the token
+is never returned in a response body).
 
 Every endpoint shares the same error-response shape:
 
@@ -37,6 +37,7 @@ exception-to-status-code table.
 - [`POST /chats/{chatId}/messages`](#post-chatschatidmessages)
 - [`POST /chats/search`](#post-chatssearch)
 - [`GET /health`](#get-health)
+- [`GET /details/professional`](#get-detailsprofessional)
 
 ---
 
@@ -440,3 +441,59 @@ An empty body confirms every dependency is reachable.
 | Status | Cause |
 |---|---|
 | 503 | One or more dependencies failed to respond; `errorMessage` names which ones (e.g. `"Health check failed for: postgres, kafka"`) |
+
+---
+
+### `GET /details/professional`
+
+Returns the portfolio owner's professional links: a public profile link
+for every configured LeetCode/Codeforces/GitHub account, the resume link,
+the profile photo link(s), and the personal websites/Twitter recorded on
+the primary LeetCode account. **No auth required.** No request body.
+Rate-limited globally (not per-user, since there's no authenticated
+caller) at 30 requests/60s.
+
+**Example**
+
+```bash
+curl -i http://localhost:8080/details/professional
+```
+
+**Response `200 OK`**
+
+```json
+{
+  "professionalDetails": {
+    "leetcodeLinks": ["https://leetcode.com/u/imsahibnanda/"],
+    "codeforcesLink": ["https://codeforces.com/profile/shisukenohara"],
+    "githubLinks": [
+      "https://github.com/thesahibnanda-max",
+      "https://github.com/thesahibnanda"
+    ],
+    "resumeLink": "https://.../Sahib_Nanda_Resume.pdf",
+    "profilePhotoLink": [
+      "https://.../ProPic1.png",
+      "https://.../ProPic2.png"
+    ],
+    "websites": ["https://portfolio-sahib-nanda.vercel.app/"],
+    "twitterUrl": "https://twitter.com/..."
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `leetcodeLinks` | array of string | One public LeetCode profile URL per configured username, built locally from configuration -- the LeetCode API has no self-referential profile URL. |
+| `codeforcesLink` | array of string | One public Codeforces profile URL per configured handle, built locally the same way. |
+| `githubLinks` | array of string | One public GitHub profile URL per configured username, taken directly from the GitHub API's own response (the one field of the three that's API-provided rather than constructed). |
+| `resumeLink` | string | URL of the portfolio owner's resume. |
+| `profilePhotoLink` | array of string | URL(s) of the portfolio owner's profile photo(s). |
+| `websites` | array of string | Personal websites, as recorded on the primary LeetCode account. Omitted if unset (see `spring.jackson.default-property-inclusion` at the top of `application.yml`). |
+| `twitterUrl` | string | Twitter profile URL, as recorded on the primary LeetCode account. Omitted if unset. |
+
+**Errors**
+
+| Status | Cause |
+|---|---|
+| 429 | Rate limit exceeded (30/60s, global) |
+| 502 | The LeetCode or GitHub API call failed |

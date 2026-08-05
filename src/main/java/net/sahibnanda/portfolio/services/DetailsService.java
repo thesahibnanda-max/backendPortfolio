@@ -32,6 +32,7 @@ import net.sahibnanda.portfolio.objects.CodeforcesDetails;
 import net.sahibnanda.portfolio.objects.GitHubDetails;
 import net.sahibnanda.portfolio.objects.LeetcodeDetails;
 import net.sahibnanda.portfolio.objects.PersonalityDetails;
+import net.sahibnanda.portfolio.objects.ProfessionalDetails;
 import net.sahibnanda.portfolio.objects.ProfileDetails;
 import net.sahibnanda.portfolio.utils.JsonUtils;
 import org.springframework.stereotype.Service;
@@ -148,6 +149,45 @@ public final class DetailsService {
     this.gitHub = gitHubClient;
     this.profile = profileClient;
     this.cache = cacheService;
+  }
+
+  /**
+   * Fetches the portfolio owner's professional links: a public profile link for
+   * every configured LeetCode/Codeforces/GitHub account, the resume link, the
+   * profile photo link(s), and the personal websites/Twitter recorded on the
+   * primary LeetCode account. LeetCode/Codeforces links are built locally from
+   * configuration -- neither API returns a self-referential profile URL --
+   * while GitHub links and the websites/Twitter fields come from live (cached)
+   * API calls.
+   *
+   * @return the composed professional details
+   */
+  public ProfessionalDetails getProfessionalDetails() {
+    Future<LeetcodeUserProfileResponse> leetcodeFuture = executor
+        .submit(() -> fetchRawLeetcodeProfile(primaryLeetcodeUsername()));
+    Future<List<String>> githubLinksFuture =
+        executor.submit(() -> runAllParallel(properties.githubUserNames(),
+            username -> fetchRawGithubUser(username).getHtmlUrl()));
+
+    LeetcodeUserProfileResponse.MatchedUser matchedUser =
+        await(leetcodeFuture).getData().getMatchedUser();
+
+    return ProfessionalDetails.builder()
+        .leetcodeLinks(buildProfileLinks(properties.leetcodeUserNames(),
+            leetcode.getBaseUrl(), properties.leetcodeProfileUrlFormat()))
+        .codeforcesLink(buildProfileLinks(properties.codeforcesUserNames(),
+            codeforces.getBaseUrl(), properties.codeforcesProfileUrlFormat()))
+        .githubLinks(await(githubLinksFuture))
+        .resumeLink(properties.resumeLink())
+        .profilePhotoLink(properties.profilePhotoLinks())
+        .websites(matchedUser.getProfile().getWebsites())
+        .twitterUrl(matchedUser.getTwitterUrl()).build();
+  }
+
+  private static List<String> buildProfileLinks(final List<String> handles,
+      final String baseUrl, final String urlFormat) {
+    return handles.stream()
+        .map(handle -> String.format(urlFormat, baseUrl, handle)).toList();
   }
 
   /**

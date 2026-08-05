@@ -171,6 +171,17 @@ public class Controller {
     return toResponseEntity(core.health());
   }
 
+  /**
+   * Returns the portfolio owner's professional links: LeetCode, Codeforces, and
+   * GitHub profile links, the resume link, and profile photo link(s).
+   *
+   * @return the professional details, or a failure response
+   */
+  @GetMapping("/details/professional")
+  public ResponseEntity<ResponsePOJO> professionalDetails() {
+    return toResponseEntity(core.professionalDetails());
+  }
+
   private static ChatRequestPOJO withAuthToken(final ChatRequestPOJO request,
       final String authToken) {
     Map<String, String> headers =

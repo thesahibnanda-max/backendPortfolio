@@ -155,8 +155,9 @@ Stateless: `X-Auth-Token` is the requesting username, symmetrically
 encrypted with `AuthProperties.secretKey()` via `TokenUtils`. There is no
 session store or database-backed token table -- decrypting the header
 *is* the authentication check. `Core.extractUsername` reads it; every
-non-Gate endpoint (everything except `/signup`, `/login`, `/health`)
-requires it, throwing `TokenException` if it's missing or invalid.
+non-Gate endpoint (everything except `/signup`, `/login`, `/health`, and
+`/details/professional`) requires it, throwing `TokenException` if it's
+missing or invalid.
 
 ## Error handling
 
@@ -205,18 +206,22 @@ body, never a bare stack trace.
 `RateLimitService`, backed by Valkey fixed-window counters, shared across
 every running instance of the app. Each API is checked **both** globally
 (one shared budget for every caller) **and** per username (that caller's
-own budget) -- either being exceeded returns `429`.
+own budget) -- either being exceeded returns `429`. The one exception is
+`professionalDetails`, which has no authenticated caller to key a
+per-username budget on, so it's checked **only** globally
+(`Core.enforceGlobalRateLimit`).
 
-| API | Max requests | Window |
-|---|---|---|
-| `signUp` | 30 | 60s |
-| `login` | 30 | 60s |
-| `createChat` | 30 | 60s |
-| `allChats` | 30 | 60s |
-| `getChatById` | 30 | 60s |
-| `updateTitle` | 30 | 60s |
-| `searchChat` | 30 | 60s |
-| `userPrompt` | 5 | 60s |
+| API | Max requests | Window | Scope |
+|---|---|---|---|
+| `signUp` | 30 | 60s | Global + per-username |
+| `login` | 30 | 60s | Global + per-username |
+| `createChat` | 30 | 60s | Global + per-username |
+| `allChats` | 30 | 60s | Global + per-username |
+| `getChatById` | 30 | 60s | Global + per-username |
+| `updateTitle` | 30 | 60s | Global + per-username |
+| `searchChat` | 30 | 60s | Global + per-username |
+| `userPrompt` | 5 | 60s | Global + per-username |
+| `professionalDetails` | 30 | 60s | Global only |
 
 `userPrompt`'s limit is deliberately far lower -- it's the only operation
 that calls the LLM, the most expensive call this app makes and the one

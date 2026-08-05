@@ -8,6 +8,7 @@ import net.sahibnanda.portfolio.pojo.ChatRequestPOJO;
 import net.sahibnanda.portfolio.pojo.ChatResponsePOJO;
 import net.sahibnanda.portfolio.pojo.ErrorResponsePOJO;
 import net.sahibnanda.portfolio.pojo.ListOfChatResponsePOJO;
+import net.sahibnanda.portfolio.pojo.ProfessionalDetailsResponsePOJO;
 import net.sahibnanda.portfolio.pojo.ResponsePOJO;
 import net.sahibnanda.portfolio.pojo.SearchRequestPOJO;
 import net.sahibnanda.portfolio.pojo.SearchResponsePOJO;
@@ -240,6 +241,32 @@ class CoreTest extends AbstractRepositoryIntegrationTest {
     ResponsePOJO response = core.health();
 
     assertThat(response.getHttpStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @Test
+  void professionalDetailsReturnsOk() {
+    valkeyCache.delete("professionalDetails");
+
+    ResponsePOJO response = core.professionalDetails();
+
+    assertThat(response.getHttpStatusCode()).isEqualTo(HttpStatus.OK);
+    ProfessionalDetailsResponsePOJO details =
+        (ProfessionalDetailsResponsePOJO) response;
+    assertThat(details.getProfessionalDetails()).isNotNull();
+    assertThat(details.getProfessionalDetails().getResumeLink()).isNotBlank();
+  }
+
+  @Test
+  void professionalDetailsExceedingRateLimitReturnsTooManyRequests() {
+    valkeyCache.delete("professionalDetails");
+
+    ResponsePOJO response = null;
+    for (int i = 0; i < 31; i++) {
+      response = core.professionalDetails();
+    }
+
+    assertThat(response.getHttpStatusCode())
+        .isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
   }
 
   @Test

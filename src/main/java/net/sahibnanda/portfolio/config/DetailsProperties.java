@@ -11,8 +11,18 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *        enrichment in Profile/Personality Details
  * @param codeforcesUserNames Codeforces handles to fetch details for
  * @param githubUserNames GitHub usernames to fetch details for
+ * @param resumeLink URL of the portfolio owner's resume
+ * @param profilePhotoLinks URLs of the portfolio owner's profile photo(s)
+ * @param leetcodeProfileUrlFormat {@link String#format} pattern taking the
+ *        LeetCode base URL and a username, used to build a public LeetCode
+ *        profile link
+ * @param codeforcesProfileUrlFormat {@link String#format} pattern taking the
+ *        Codeforces base URL and a handle, used to build a public Codeforces
+ *        profile link
  */
 @ConfigurationProperties(prefix = "details")
 public record DetailsProperties(List<String> leetcodeUserNames,
-    List<String> codeforcesUserNames, List<String> githubUserNames) {
+    List<String> codeforcesUserNames, List<String> githubUserNames,
+    String resumeLink, List<String> profilePhotoLinks,
+    String leetcodeProfileUrlFormat, String codeforcesProfileUrlFormat) {
 }
