@@ -143,7 +143,14 @@ mvn checkstyle:check        # verify style (Sun ruleset: 80-column lines,
 
 ```bash
 docker build -t backend-portfolio .
-docker run -p 8080:8080 --env-file prod.env backend-portfolio
+
+# --env-file accepts any file name -- use whichever environment's vars
+# you want (.env, stage.env, prod.env, ...); all *.env / .env* names are
+# gitignored, so none of these ever get committed.
+docker run -p 8080:8080 --env-file .env backend-portfolio
+
+# e.g. for a staging deploy:
+docker run -p 8080:8080 --env-file stage.env backend-portfolio
 ```
 
 ## Running the tests
