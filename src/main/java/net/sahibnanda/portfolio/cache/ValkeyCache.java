@@ -22,6 +22,16 @@ import org.springframework.stereotype.Component;
 @Component
 public final class ValkeyCache {
 
+  // GLIDE's own default is 250ms -- fine on a fast local link, but not
+  // enough for a TLS handshake to a remote managed Valkey instance from a
+  // CPU-throttled host (e.g. Render free tier on cold start), where it
+  // fails with a spurious TimeoutException even though the server is
+  // perfectly reachable.
+  /**
+   * Per-request timeout, in milliseconds, for every call through this client.
+   */
+  private static final int REQUEST_TIMEOUT_MILLIS = 5000;
+
   /** Underlying Valkey GLIDE client used for all cache operations. */
   private final GlideClient glideClient;
 
@@ -49,7 +59,7 @@ public final class ValkeyCache {
     GlideClientConfiguration config = GlideClientConfiguration.builder()
         .address(address).credentials(buildCredentials(valkeyProperties))
         .useTLS(Boolean.TRUE.equals(valkeyProperties.useTls()))
-        .lazyConnect(true).build();
+        .requestTimeout(REQUEST_TIMEOUT_MILLIS).lazyConnect(true).build();
 
     this.glideClient = await(GlideClient.createClient(config));
     await(this.glideClient.ping());
