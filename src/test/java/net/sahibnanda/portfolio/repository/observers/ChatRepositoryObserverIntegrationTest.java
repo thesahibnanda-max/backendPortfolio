@@ -24,7 +24,7 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.kafka.autoconfigure.KafkaProperties;
+import org.springframework.boot.kafka.autoconfigure.KafkaConnectionDetails;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
 
 class ChatRepositoryObserverIntegrationTest
@@ -37,7 +37,7 @@ class ChatRepositoryObserverIntegrationTest
   private UserRepository userRepository;
 
   @Autowired
-  private KafkaProperties kafkaProperties;
+  private KafkaConnectionDetails kafkaConnectionDetails;
 
   @Autowired
   private ChatObserverProperties chatObserverProperties;
@@ -176,7 +176,7 @@ class ChatRepositoryObserverIntegrationTest
         new JsonDeserializer<>(ChatObserverDTO.class);
     valueDeserializer.addTrustedPackages("*");
     Map<String, Object> props = Map.of(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
-        String.join(",", kafkaProperties.getBootstrapServers()),
+        String.join(",", kafkaConnectionDetails.getBootstrapServers()),
         ConsumerConfig.GROUP_ID_CONFIG,
         "chat-observer-test-" + UlidCreator.getUlid(),
         ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest",

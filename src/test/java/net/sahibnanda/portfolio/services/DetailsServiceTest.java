@@ -16,6 +16,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
+import net.sahibnanda.portfolio.cache.AbstractValkeyIntegrationTest;
 import net.sahibnanda.portfolio.cache.InMemoryCache;
 import net.sahibnanda.portfolio.cache.ValkeyCache;
 import net.sahibnanda.portfolio.client.CodeforcesClient;
@@ -37,7 +38,7 @@ import net.sahibnanda.portfolio.utils.TestEnvironment;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-class DetailsServiceTest {
+class DetailsServiceTest extends AbstractValkeyIntegrationTest {
 
   private static DetailsService detailsService;
 
@@ -57,9 +58,8 @@ class DetailsServiceTest {
         new ProfileProperties(TestEnvironment.PROFILE_JSON_RETRIEVAL_URL,
             TestEnvironment.PERSONALITY_JSON_RETRIEVAL_URL));
     CacheService cacheService = new CacheService(new InMemoryCache(),
-        new ValkeyCache(new ValkeyProperties(TestEnvironment.VALKEY_HOST,
-            TestEnvironment.VALKEY_PORT, null, null,
-            TestEnvironment.VALKEY_USE_TLS)));
+        new ValkeyCache(new ValkeyProperties(VALKEY.getHost(),
+            VALKEY.getMappedPort(6379), null, null, false)));
 
     detailsService = new DetailsService(detailsProperties, leetcodeClient,
         codeforcesClient, gitHubClient, profileClient, cacheService);

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.util.List;
 import java.util.Map;
+import net.sahibnanda.portfolio.cache.AbstractValkeyIntegrationTest;
 import net.sahibnanda.portfolio.cache.InMemoryCache;
 import net.sahibnanda.portfolio.cache.ValkeyCache;
 import net.sahibnanda.portfolio.client.CodeforcesClient;
@@ -31,7 +32,7 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 @Disabled("Manual-only: requires a real GROQ_API_KEYS in a local .env.")
-class WorkerServiceTest {
+class WorkerServiceTest extends AbstractValkeyIntegrationTest {
 
   private static WorkerService workerService;
 
@@ -64,9 +65,8 @@ class WorkerServiceTest {
         new ProfileProperties(TestEnvironment.PROFILE_JSON_RETRIEVAL_URL,
             TestEnvironment.PERSONALITY_JSON_RETRIEVAL_URL));
     CacheService cacheService = new CacheService(new InMemoryCache(),
-        new ValkeyCache(new ValkeyProperties(TestEnvironment.VALKEY_HOST,
-            TestEnvironment.VALKEY_PORT, null, null,
-            TestEnvironment.VALKEY_USE_TLS)));
+        new ValkeyCache(new ValkeyProperties(VALKEY.getHost(),
+            VALKEY.getMappedPort(6379), null, null, false)));
     DetailsService detailsService =
         new DetailsService(detailsProperties, leetcodeClient, codeforcesClient,
             gitHubClient, profileClient, cacheService);

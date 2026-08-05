@@ -3,20 +3,17 @@ package net.sahibnanda.portfolio.cache;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import net.sahibnanda.portfolio.config.ValkeyProperties;
-import net.sahibnanda.portfolio.utils.TestEnvironment;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-class ValkeyCacheTest {
+class ValkeyCacheTest extends AbstractValkeyIntegrationTest {
 
   private static ValkeyCache valkeyCache;
 
   @BeforeAll
   static void setup() {
-    valkeyCache =
-        new ValkeyCache(new ValkeyProperties(TestEnvironment.VALKEY_HOST,
-            TestEnvironment.VALKEY_PORT, null, null,
-            TestEnvironment.VALKEY_USE_TLS));
+    valkeyCache = new ValkeyCache(new ValkeyProperties(VALKEY.getHost(),
+        VALKEY.getMappedPort(6379), null, null, false));
   }
 
   @Test

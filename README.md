@@ -38,7 +38,10 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for how it all fits together and
 
 These commands use the exact host/port/credential defaults already baked
 into `application.yml`, so the app runs with **zero environment
-variables set** once they're up:
+variables set** once they're up. (These are only needed to run the app
+itself or build/run its Docker image -- `mvn test`/`mvn clean test`
+provisions its own containers automatically via Testcontainers; see
+["Running the tests"](#running-the-tests).)
 
 ```bash
 # PostgreSQL
@@ -170,10 +173,19 @@ host automatically), e.g. `DB_HOST=host.docker.internal`,
 mvn clean test
 ```
 
-Requires all four infrastructure containers above to be running (tests
-use real Postgres/Kafka/OpenSearch/Valkey, not mocks). Tests run in
-parallel (`src/test/resources/junit-platform.properties`) and take
-roughly 90-100 seconds end to end.
+Tests are fully self-contained via [Testcontainers](https://testcontainers.com/):
+Postgres, Kafka, Valkey, and OpenSearch are each started automatically in
+disposable Docker containers for the duration of the test run, so **none
+of the manual `docker run` commands under
+["Running the required infrastructure"](#running-the-required-infrastructure)
+are needed to run the test suite** -- those are only needed to run the app
+itself (`mvn spring-boot:run`) or to build/run the Docker image. A running
+Docker daemon is still required (Testcontainers needs it to start the
+containers), but nothing else. Tests use real Postgres/Kafka/OpenSearch/Valkey
+against these ephemeral containers, not mocks. Tests run in parallel
+(`src/test/resources/junit-platform.properties`) and take roughly
+90-100 seconds end to end (plus a one-time image pull the first time you
+run them).
 
 ## Project structure
 

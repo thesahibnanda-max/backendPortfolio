@@ -18,7 +18,7 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.kafka.autoconfigure.KafkaProperties;
+import org.springframework.boot.kafka.autoconfigure.KafkaConnectionDetails;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
 
 class UserRepositoryObserverIntegrationTest
@@ -28,7 +28,7 @@ class UserRepositoryObserverIntegrationTest
   private JooqUserRepository userRepository;
 
   @Autowired
-  private KafkaProperties kafkaProperties;
+  private KafkaConnectionDetails kafkaConnectionDetails;
 
   @Autowired
   private UserObserverProperties userObserverProperties;
@@ -71,7 +71,7 @@ class UserRepositoryObserverIntegrationTest
         new JsonDeserializer<>(UserObserverDTO.class);
     valueDeserializer.addTrustedPackages("*");
     Map<String, Object> props = Map.of(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
-        String.join(",", kafkaProperties.getBootstrapServers()),
+        String.join(",", kafkaConnectionDetails.getBootstrapServers()),
         ConsumerConfig.GROUP_ID_CONFIG,
         "user-observer-test-" + UlidCreator.getUlid(),
         ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest",

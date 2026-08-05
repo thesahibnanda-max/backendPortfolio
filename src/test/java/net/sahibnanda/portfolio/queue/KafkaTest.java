@@ -11,7 +11,6 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.sahibnanda.portfolio.exception.KafkaConsumerAlreadyStartedException;
-import net.sahibnanda.portfolio.utils.TestEnvironment;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -29,11 +28,18 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.kafka.KafkaContainer;
 
+@Testcontainers
 class KafkaTest {
 
-  private static final String BOOTSTRAP_SERVERS =
-      TestEnvironment.KAFKA_BOOTSTRAP_SERVERS;
+  @Container
+  private static final KafkaContainer KAFKA =
+      new KafkaContainer("apache/kafka:4.1.0");
+
+  private static String bootstrapServers;
 
   private static ProducerFactory<String, Object> producerFactory;
 
@@ -43,8 +49,9 @@ class KafkaTest {
 
   @BeforeAll
   static void setupProducer() {
+    bootstrapServers = KAFKA.getBootstrapServers();
     producerFactory = new DefaultKafkaProducerFactory<>(Map.of(
-        ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, BOOTSTRAP_SERVERS,
+        ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
         ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class,
         ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class));
   }
@@ -61,7 +68,7 @@ class KafkaTest {
     valueDeserializer.addTrustedPackages("*");
     ConsumerFactory<String, Object> consumerFactory =
         new DefaultKafkaConsumerFactory<>(
-            Map.of(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, BOOTSTRAP_SERVERS,
+            Map.of(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
                 ConsumerConfig.GROUP_ID_CONFIG,
                 "kafka-test-" + UlidCreator.getUlid(),
                 ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false,
@@ -70,7 +77,7 @@ class KafkaTest {
 
     kafka = new Kafka(
         new KafkaTemplate<>(producerFactory), new KafkaAdmin(Map
-            .of(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, BOOTSTRAP_SERVERS)),
+            .of(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers)),
         consumerFactory);
     kafka.createTopicIfNotExists(topicName, 1, (short) 1);
   }

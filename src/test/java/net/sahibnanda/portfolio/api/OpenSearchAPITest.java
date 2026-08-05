@@ -28,22 +28,33 @@ import net.sahibnanda.portfolio.models.OpenSearchSortCondition;
 import net.sahibnanda.portfolio.options.OpenSearchCreateIndexOptions;
 import net.sahibnanda.portfolio.options.OpenSearchIndexDocumentOptions;
 import net.sahibnanda.portfolio.options.OpenSearchSearchOptions;
-import net.sahibnanda.portfolio.utils.TestEnvironment;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
+@Testcontainers
 class OpenSearchAPITest {
+
+  @Container
+  private static final GenericContainer<?> OPENSEARCH = new GenericContainer<>(
+      DockerImageName.parse("opensearchproject/opensearch:3.5.0"))
+      .withExposedPorts(9200).withEnv("discovery.type", "single-node")
+      .withEnv("DISABLE_SECURITY_PLUGIN", "true").waitingFor(
+          Wait.forHttp("/_cluster/health").forPort(9200).forStatusCode(200));
 
   private OpenSearchAPI openSearchAPI;
   private String indexName;
 
   @BeforeEach
   void setup() {
-    openSearchAPI = new OpenSearchAPI(new OpenSearchProperties(
-        TestEnvironment.OPENSEARCH_HOST, TestEnvironment.OPENSEARCH_PORT,
-        TestEnvironment.OPENSEARCH_USERNAME,
-        TestEnvironment.OPENSEARCH_PASSWORD, TestEnvironment.OPENSEARCH_HTTPS));
+    openSearchAPI =
+        new OpenSearchAPI(new OpenSearchProperties(OPENSEARCH.getHost(),
+            OPENSEARCH.getMappedPort(9200), "admin", "admin", false));
     indexName = ("opensearch-test-" + UlidCreator.getUlid()).toLowerCase();
 
     openSearchAPI.createIndexIfNotExists(OpenSearchCreateIndexOptions.builder()

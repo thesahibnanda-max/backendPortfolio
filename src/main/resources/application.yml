@@ -87,13 +87,13 @@ auth:
 chat-observer:
   kafka-topics:
     chat_repo_event:
-      partitions: 3
+      partitions: 2
       replication-factor: 1
 
 user-observer:
   kafka-topics:
     user_repo_event:
-      partitions: 3
+      partitions: 2
       replication-factor: 1
 
 opensearch:
