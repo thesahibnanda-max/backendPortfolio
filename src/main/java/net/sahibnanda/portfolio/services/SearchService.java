@@ -12,6 +12,7 @@ import net.sahibnanda.portfolio.config.ChatObserverProperties;
 import net.sahibnanda.portfolio.config.SearchProperties;
 import net.sahibnanda.portfolio.config.UserObserverProperties;
 import net.sahibnanda.portfolio.dto.ChatObserverDTO;
+import net.sahibnanda.portfolio.dto.UserObserverDTO;
 import net.sahibnanda.portfolio.entity.Message;
 import net.sahibnanda.portfolio.entity.Role;
 import net.sahibnanda.portfolio.enums.OpenSearchExactQueryType;
@@ -33,7 +34,12 @@ import org.springframework.stereotype.Service;
  * {@link net.sahibnanda.portfolio.repository.observers.ChatRepositoryObserver}
  * and upserts one OpenSearch document per chat title and per message, keyed so
  * later events for the same chat/message merge into the same document instead
- * of creating duplicates.
+ * of creating duplicates. Also consumes {@link UserObserverDTO} events
+ * published by
+ * {@link net.sahibnanda.portfolio.repository.observers.UserRepositoryObserver}
+ * to remove a deleted user's chat documents -- chats are cascade-deleted from
+ * Postgres when their owning user is deleted, so no per-chat
+ * {@code CHAT_DELETED} event exists to trigger that cleanup otherwise.
  *
  * <p>
  * Document id scheme: a chat's title document is keyed {@code <chatId>#TITLE};
@@ -85,10 +91,13 @@ public class SearchService {
   private static final int CONSUMER_RETRY_COUNT = 3;
 
   /**
-   * Upper bound on documents deleted for one chat (its title document plus one
-   * per message) -- generous enough that no real chat would exceed it.
+   * Upper bound on documents removed by one bulk delete (a chat's title plus
+   * its messages, or every chat/message document for a deleted user). Capped at
+   * OpenSearch's default {@code index.max_result_window} (10,000) -- requesting
+   * a larger {@code size} makes every matching search request fail with
+   * {@code search_phase_execution_exception}.
    */
-  private static final int MAX_CHAT_DOCUMENTS = 10_000;
+  private static final int MAX_DELETE_BATCH_SIZE = 10_000;
 
   /**
    * Mapping/document field for {@link #CHAT_ID_KEY}.
@@ -184,11 +193,95 @@ public class SearchService {
    * constructor since it starts long-running consumer threads.
    */
   @PostConstruct
-  public void startConsumer() {
+  public void startConsumerChat() {
     for (String topic : chatObserverProperties.kafkaTopics().keySet()) {
       kafka.startConsumer(topic, CONSUMER_RETRY_COUNT, ChatObserverDTO.class,
           (eventId, dto) -> handleChatEvent(dto));
     }
+  }
+
+  /**
+   * Subscribes to every configured user-observer Kafka topic and reacts to each
+   * event. Registered in {@code @PostConstruct} rather than the constructor
+   * since it starts long-running consumer threads.
+   */
+  @PostConstruct
+  public void startConsumerUser() {
+    for (String topic : userObserverProperties.kafkaTopics().keySet()) {
+      kafka.startConsumer(topic, CONSUMER_RETRY_COUNT, UserObserverDTO.class,
+          (eventId, dto) -> handleUserEvent(dto));
+    }
+  }
+
+  private void handleUserEvent(final UserObserverDTO dto) {
+    if (dto == null) {
+      throw new IllegalStateException("Received a null user observer event");
+    }
+    if (dto.getStatus() == null) {
+      throw new IllegalStateException(
+          "User observer event has no status: " + dto);
+    }
+    if (StringUtils.isEmpty(dto.getUsername())) {
+      throw new IllegalStateException(
+          "User observer event has no username: " + dto);
+    }
+    switch (dto.getStatus()) {
+      case USER_DELETED -> handleUserDeletedEvent(dto);
+      case USER_CREATED, USER_PASSWORD_UPDATED ->
+        log.debug("No search index action for {} (user {})", dto.getStatus(),
+            dto.getUsername());
+      default ->
+        log.warn("Unhandled user observer status: {}", dto.getStatus());
+    }
+  }
+
+  /**
+   * Deletes every OpenSearch document belonging to chats owned by a deleted
+   * user -- their title and message documents. Chats are removed from Postgres
+   * via an {@code ON DELETE CASCADE} foreign key when their owning user is
+   * deleted, so no per-chat {@code CHAT_DELETED} event is published for them;
+   * this is the only place that cleanup happens.
+   *
+   * <p>
+   * Routed through each chat's id rather than a direct {@link #USERNAME_KEY}
+   * lookup: message documents are indexed from
+   * {@code CHAT_MESSAGE_SAVED_USER}/{@code _ASSISTANT} events, whose
+   * {@link ChatObserverDTO#getUsername()} is always {@code null} by that DTO's
+   * own documented design -- so {@link #USERNAME_KEY} is only ever reliably set
+   * on a chat's title document, never on its message documents.
+   *
+   * @param dto the user deleted event
+   */
+  private void handleUserDeletedEvent(final UserObserverDTO dto) {
+    OpenSearchSearchResult titleDocuments =
+        openSearchAPI.search(OpenSearchSearchOptions.builder()
+            .indexName(searchProperties.chatIndexName())
+            .filter(OpenSearchExactQueryCondition.builder()
+                .type(OpenSearchExactQueryType.TERM).field(USERNAME_KEY)
+                .value(dto.getUsername()).build())
+            .filter(OpenSearchExactQueryCondition.builder()
+                .type(OpenSearchExactQueryType.TERM).field(TYPE_KEY)
+                .value(TYPE_TITLE).build())
+            .size(MAX_DELETE_BATCH_SIZE).build());
+
+    List<Object> chatIds = titleDocuments.getHits().stream()
+        .map(hit -> hit.getSource().get(CHAT_ID_KEY)).filter(Objects::nonNull)
+        .toList();
+    if (chatIds.isEmpty()) {
+      return;
+    }
+
+    OpenSearchSearchResult chatDocuments =
+        openSearchAPI.search(OpenSearchSearchOptions.builder()
+            .indexName(searchProperties.chatIndexName())
+            .filter(OpenSearchExactQueryCondition.builder()
+                .type(OpenSearchExactQueryType.TERMS).field(CHAT_ID_KEY)
+                .values(chatIds).build())
+            .size(MAX_DELETE_BATCH_SIZE).build());
+
+    chatDocuments.getHits().stream().map(OpenSearchSearchHit::getId)
+        .forEach(documentId -> openSearchAPI.deleteDocumentIfExists(
+            searchProperties.chatIndexName(), documentId));
   }
 
   private void handleChatEvent(final ChatObserverDTO dto) {
@@ -228,7 +321,7 @@ public class SearchService {
         .filter(OpenSearchExactQueryCondition.builder()
             .type(OpenSearchExactQueryType.TERM).field(CHAT_ID_KEY)
             .value(dto.getChatId()).build())
-        .size(MAX_CHAT_DOCUMENTS).build());
+        .size(MAX_DELETE_BATCH_SIZE).build());
 
     result.getHits().stream().map(OpenSearchSearchHit::getId)
         .forEach(documentId -> openSearchAPI.deleteDocumentIfExists(

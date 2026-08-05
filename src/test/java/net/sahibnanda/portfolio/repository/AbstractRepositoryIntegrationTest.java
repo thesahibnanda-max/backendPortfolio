@@ -8,6 +8,8 @@ import net.sahibnanda.portfolio.jooq.Tables;
 import org.jooq.DSLContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.parallel.ResourceAccessMode;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -16,7 +18,15 @@ import org.springframework.core.io.Resource;
 import org.springframework.util.StreamUtils;
 import org.testcontainers.containers.PostgreSQLContainer;
 
+// Every subclass shares the one singleton Postgres container below and
+// truncates its tables in @BeforeEach/@AfterEach; several subclasses also
+// reuse fixed usernames. Running two subclasses concurrently would race on
+// both. This lock serializes all subclasses against each other (via the
+// shared resource name) while leaving them free to run in parallel with
+// every other test class in the suite -- see junit-platform.properties.
 @SpringBootTest
+@ResourceLock(value = "shared-postgres-database",
+    mode = ResourceAccessMode.READ_WRITE)
 public abstract class AbstractRepositoryIntegrationTest {
 
   // Singleton container pattern: started once (statically) for the whole
