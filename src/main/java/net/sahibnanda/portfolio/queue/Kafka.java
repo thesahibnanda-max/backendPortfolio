@@ -45,8 +45,13 @@ import org.springframework.stereotype.Component;
 @Component
 public final class Kafka {
 
+  // 10s wasn't enough for the very first admin call against a SASL_SSL
+  // broker from a CPU-throttled cold start (e.g. Render free tier):
+  // SASL/SCRAM alone is 4 round trips (client-first, server-first,
+  // client-final, server-final) on top of the TLS handshake, before the
+  // actual request even goes out.
   /** Bound on every blocking admin/producer call. */
-  private static final Duration OPERATION_TIMEOUT = Duration.ofSeconds(10);
+  private static final Duration OPERATION_TIMEOUT = Duration.ofSeconds(30);
 
   /** How long each consumer loop iteration blocks waiting for records. */
   private static final Duration POLL_DURATION = Duration.ofSeconds(2);
