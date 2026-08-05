@@ -33,6 +33,7 @@ import net.sahibnanda.portfolio.objects.CodeforcesDetails;
 import net.sahibnanda.portfolio.objects.GitHubDetails;
 import net.sahibnanda.portfolio.objects.LeetcodeDetails;
 import net.sahibnanda.portfolio.objects.PersonalityDetails;
+import net.sahibnanda.portfolio.objects.ProfessionalDetails;
 import net.sahibnanda.portfolio.objects.ProfileDetails;
 import net.sahibnanda.portfolio.utils.TestEnvironment;
 import org.junit.jupiter.api.BeforeAll;
@@ -42,16 +43,28 @@ class DetailsServiceTest extends AbstractValkeyIntegrationTest {
 
   private static DetailsService detailsService;
 
+  private static final String TEST_RESUME_LINK =
+      "https://example.com/resume.pdf";
+
+  private static final List<String> TEST_PROFILE_PHOTO_LINKS = List
+      .of("https://example.com/photo1.png", "https://example.com/photo2.png");
+
   @BeforeAll
   static void setup() {
     DetailsProperties detailsProperties =
         new DetailsProperties(List.of("imsahibnanda"), List.of("shisukenohara"),
-            List.of("thesahibnanda-max", "thesahibnanda"));
+            List.of("thesahibnanda-max", "thesahibnanda"), TEST_RESUME_LINK,
+            TEST_PROFILE_PHOTO_LINKS,
+            TestEnvironment.DETAILS_LEETCODE_PROFILE_URL_FORMAT,
+            TestEnvironment.DETAILS_CODEFORCES_PROFILE_URL_FORMAT);
 
-    LeetcodeClient leetcodeClient = new LeetcodeClient(
-        new LeetcodeProperties(TestEnvironment.LEETCODE_BASE_URL));
-    CodeforcesClient codeforcesClient = new CodeforcesClient(
-        new CodeforcesProperties(TestEnvironment.CODEFORCES_BASE_URL));
+    LeetcodeProperties leetcodeProperties =
+        new LeetcodeProperties(TestEnvironment.LEETCODE_BASE_URL);
+    CodeforcesProperties codeforcesProperties =
+        new CodeforcesProperties(TestEnvironment.CODEFORCES_BASE_URL);
+    LeetcodeClient leetcodeClient = new LeetcodeClient(leetcodeProperties);
+    CodeforcesClient codeforcesClient =
+        new CodeforcesClient(codeforcesProperties);
     GitHubClient gitHubClient =
         new GitHubClient(new GitHubProperties(TestEnvironment.GITHUB_BASE_URL));
     ProfileClient profileClient = new ProfileClient(
@@ -121,6 +134,35 @@ class DetailsServiceTest extends AbstractValkeyIntegrationTest {
     assertEquals(List.of("thesahibnanda-max", "thesahibnanda"),
         details.getGithubUsernames());
     assertNotNull(details.getLinkedinUrl());
+  }
+
+  @Test
+  void getProfessionalDetails() {
+    ProfessionalDetails details = detailsService.getProfessionalDetails();
+    System.out.println(details);
+
+    assertNotNull(details);
+    assertEquals(
+        List.of(
+            String.format(TestEnvironment.DETAILS_LEETCODE_PROFILE_URL_FORMAT,
+                TestEnvironment.LEETCODE_BASE_URL, "imsahibnanda")),
+        details.getLeetcodeLinks());
+    assertEquals(
+        List.of(
+            String.format(TestEnvironment.DETAILS_CODEFORCES_PROFILE_URL_FORMAT,
+                TestEnvironment.CODEFORCES_BASE_URL, "shisukenohara")),
+        details.getCodeforcesLink());
+    assertEquals(List.of("https://github.com/thesahibnanda-max",
+        "https://github.com/thesahibnanda"), details.getGithubLinks());
+    assertEquals(TEST_RESUME_LINK, details.getResumeLink());
+    assertEquals(TEST_PROFILE_PHOTO_LINKS, details.getProfilePhotoLink());
+
+    // websites/twitterUrl both come from the same primary-LeetCode-account
+    // fetch getProfileDetails() already reads -- check they agree rather
+    // than hardcoding a guess at the real account's actual data.
+    ProfileDetails profileDetails = detailsService.getProfileDetails();
+    assertEquals(profileDetails.getWebsites(), details.getWebsites());
+    assertEquals(profileDetails.getTwitterUrl(), details.getTwitterUrl());
   }
 
   @Test

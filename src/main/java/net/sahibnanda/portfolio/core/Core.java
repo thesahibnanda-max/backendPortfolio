@@ -29,11 +29,13 @@ import net.sahibnanda.portfolio.exception.ValkeyCacheException;
 import net.sahibnanda.portfolio.objects.ChatObject;
 import net.sahibnanda.portfolio.objects.ChatSearchResult;
 import net.sahibnanda.portfolio.objects.OrchestratorResponse;
+import net.sahibnanda.portfolio.objects.ProfessionalDetails;
 import net.sahibnanda.portfolio.objects.UserObject;
 import net.sahibnanda.portfolio.pojo.ChatRequestPOJO;
 import net.sahibnanda.portfolio.pojo.ChatResponsePOJO;
 import net.sahibnanda.portfolio.pojo.ErrorResponsePOJO;
 import net.sahibnanda.portfolio.pojo.ListOfChatResponsePOJO;
+import net.sahibnanda.portfolio.pojo.ProfessionalDetailsResponsePOJO;
 import net.sahibnanda.portfolio.pojo.RequestPOJO;
 import net.sahibnanda.portfolio.pojo.ResponsePOJO;
 import net.sahibnanda.portfolio.pojo.SearchRequestPOJO;
@@ -41,6 +43,7 @@ import net.sahibnanda.portfolio.pojo.SearchResponsePOJO;
 import net.sahibnanda.portfolio.pojo.UserGateRequestPOJO;
 import net.sahibnanda.portfolio.pojo.UserGateResponsePOJO;
 import net.sahibnanda.portfolio.services.CronPingService;
+import net.sahibnanda.portfolio.services.DetailsService;
 import net.sahibnanda.portfolio.services.OrchestratorService;
 import net.sahibnanda.portfolio.services.RateLimitService;
 import net.sahibnanda.portfolio.services.SearchService;
@@ -104,6 +107,9 @@ public class Core {
   /** API name used to key {@link #searchChat}'s rate limit. */
   private static final String API_SEARCH_CHAT = "searchChat";
 
+  /** API name used to key {@link #professionalDetails}'s rate limit. */
+  private static final String API_PROFESSIONAL_DETAILS = "professionalDetails";
+
   /** Handles user sign-up and login against the users table. */
   private final UserChatService userChatService;
 
@@ -124,6 +130,9 @@ public class Core {
 
   /** Searches the requesting user's chats. */
   private final SearchService searchService;
+
+  /** Fetches the portfolio owner's professional links. */
+  private final DetailsService detailsService;
 
   /**
    * How many requests are allowed for an API, and over what window.
@@ -147,7 +156,8 @@ public class Core {
           API_ALL_CHATS, new RateLimitRule(30, 60), API_GET_CHAT_BY_ID,
           new RateLimitRule(30, 60), API_UPDATE_TITLE,
           new RateLimitRule(30, 60), API_USER_PROMPT, new RateLimitRule(5, 60),
-          API_SEARCH_CHAT, new RateLimitRule(30, 60));
+          API_SEARCH_CHAT, new RateLimitRule(30, 60), API_PROFESSIONAL_DETAILS,
+          new RateLimitRule(30, 60));
 
   /**
    * Constructs a new {@code Core} wiring the Gate, Orchestrator, and Worker
@@ -161,11 +171,13 @@ public class Core {
    *        endpoint
    * @param limitService enforces per-API and per-username rate limits
    * @param searcher searches the requesting user's chats
+   * @param detailsFetcher fetches the portfolio owner's professional links
    */
   public Core(final UserChatService chatService,
       final OrchestratorService orchestrator, final WorkerService worker,
       final AuthProperties authConfig, final CronPingService pingService,
-      final RateLimitService limitService, final SearchService searcher) {
+      final RateLimitService limitService, final SearchService searcher,
+      final DetailsService detailsFetcher) {
     this.userChatService =
         Objects.requireNonNull(chatService, "userChatService is null");
     this.orchestratorService =
@@ -180,6 +192,8 @@ public class Core {
         Objects.requireNonNull(limitService, "rateLimitService is null");
     this.searchService =
         Objects.requireNonNull(searcher, "searchService is null");
+    this.detailsService =
+        Objects.requireNonNull(detailsFetcher, "detailsService is null");
   }
 
   /**
@@ -403,6 +417,44 @@ public class Core {
           .timestamp(LocalDateTime.now()).build();
     } catch (Exception e) {
       return buildErrorResponse(e);
+    }
+  }
+
+  /**
+   * Returns the portfolio owner's professional links: LeetCode, Codeforces, and
+   * GitHub profile links, the resume link, and profile photo link(s).
+   *
+   * @return a {@link ProfessionalDetailsResponsePOJO} with the professional
+   *         details, or an {@link ErrorResponsePOJO} describing the failure
+   */
+  public ResponsePOJO professionalDetails() {
+    try {
+      enforceGlobalRateLimit(API_PROFESSIONAL_DETAILS);
+      ProfessionalDetails details = detailsService.getProfessionalDetails();
+      return ProfessionalDetailsResponsePOJO.builder()
+          .httpStatusCode(HttpStatus.OK).timestamp(LocalDateTime.now())
+          .professionalDetails(details).build();
+    } catch (Exception e) {
+      return buildErrorResponse(e);
+    }
+  }
+
+  /**
+   * Enforces the configured rate limit for {@code api}, applied only globally
+   * (shared across every caller) -- for endpoints with no authenticated caller
+   * to key a per-username limit on.
+   *
+   * @param api the name of the operation being rate-limited
+   * @throws RateLimitExceededException if the limit has been exceeded
+   */
+  private void enforceGlobalRateLimit(final String api) {
+    RateLimitRule rule = RATE_LIMITS.get(api);
+    if (rule == null) {
+      return;
+    }
+    if (!rateLimitService.isAllowed(api, rule.maxAllowed(),
+        rule.ttlSeconds())) {
+      throw new RateLimitExceededException(api);
     }
   }
 

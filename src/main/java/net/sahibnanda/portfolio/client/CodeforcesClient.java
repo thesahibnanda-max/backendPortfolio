@@ -72,6 +72,18 @@ public final class CodeforcesClient {
   }
 
   /**
+   * Returns the configured Codeforces base URL, with no trailing slash (e.g.
+   * for building public profile links outside the rating API this client itself
+   * calls).
+   *
+   * @return the Codeforces base URL, without a trailing slash
+   */
+  public String getBaseUrl() {
+    String url = baseUrl.toString();
+    return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
+  }
+
+  /**
    * Fetches a Codeforces user's contest rating history.
    *
    * @param username the Codeforces handle to look up

@@ -61,11 +61,18 @@ class OrchestratorServiceTest extends AbstractValkeyIntegrationTest {
 
     DetailsProperties detailsProperties =
         new DetailsProperties(List.of("imsahibnanda"), List.of("shisukenohara"),
-            List.of("thesahibnanda-max", "thesahibnanda"));
-    LeetcodeClient leetcodeClient = new LeetcodeClient(
-        new LeetcodeProperties(TestEnvironment.LEETCODE_BASE_URL));
-    CodeforcesClient codeforcesClient = new CodeforcesClient(
-        new CodeforcesProperties(TestEnvironment.CODEFORCES_BASE_URL));
+            List.of("thesahibnanda-max", "thesahibnanda"),
+            "https://example.com/resume.pdf",
+            List.of("https://example.com/photo.png"),
+            TestEnvironment.DETAILS_LEETCODE_PROFILE_URL_FORMAT,
+            TestEnvironment.DETAILS_CODEFORCES_PROFILE_URL_FORMAT);
+    LeetcodeProperties leetcodeProperties =
+        new LeetcodeProperties(TestEnvironment.LEETCODE_BASE_URL);
+    CodeforcesProperties codeforcesProperties =
+        new CodeforcesProperties(TestEnvironment.CODEFORCES_BASE_URL);
+    LeetcodeClient leetcodeClient = new LeetcodeClient(leetcodeProperties);
+    CodeforcesClient codeforcesClient =
+        new CodeforcesClient(codeforcesProperties);
     GitHubClient gitHubClient =
         new GitHubClient(new GitHubProperties(TestEnvironment.GITHUB_BASE_URL));
     ProfileClient profileClient = new ProfileClient(

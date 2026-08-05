@@ -57,6 +57,9 @@ public final class LeetcodeClient {
   /** Fully resolved URL of the Leetcode GraphQL endpoint. */
   private final HttpUrl graphqlUrl;
 
+  /** Base URL of the Leetcode API, resolved from configuration. */
+  private final HttpUrl baseUrl;
+
   /**
    * Creates a client configured with the given Leetcode properties.
    *
@@ -73,9 +76,8 @@ public final class LeetcodeClient {
       throw new IllegalStateException("Leetcode base URL is not configured.");
     }
 
-    HttpUrl baseUrl =
-        Objects.requireNonNull(HttpUrl.parse(properties.baseUrl()),
-            "Invalid Leetcode base URL: " + properties.baseUrl());
+    this.baseUrl = Objects.requireNonNull(HttpUrl.parse(properties.baseUrl()),
+        "Invalid Leetcode base URL: " + properties.baseUrl());
 
     HttpUrl.Builder urlBuilder = baseUrl.newBuilder();
     for (String segment : GRAPHQL_PATH) {
@@ -83,6 +85,18 @@ public final class LeetcodeClient {
     }
 
     this.graphqlUrl = urlBuilder.build();
+  }
+
+  /**
+   * Returns the configured Leetcode base URL, with no trailing slash (e.g. for
+   * building public profile links outside the GraphQL API this client itself
+   * calls).
+   *
+   * @return the Leetcode base URL, without a trailing slash
+   */
+  public String getBaseUrl() {
+    String url = baseUrl.toString();
+    return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
   }
 
   /**
