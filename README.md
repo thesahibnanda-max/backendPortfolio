@@ -53,8 +53,12 @@ docker run -d --name kafka -p 9092:9092 \
   -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 \
   -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092 \
   -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER \
-  -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@localhost:9093 \
-  apache/kafka:latest
+  -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
+  -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093 \
+  -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
+  -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 \
+  -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 \
+  apache/kafka:3.9.0
 
 # OpenSearch (security plugin's demo admin/admin credentials)
 docker run -d --name opensearch -p 9200:9200 -p 9600:9600 \
@@ -109,7 +113,8 @@ suitable for local development. Set them via `prod.env` (or your own
 ## Build & run
 
 ```bash
-# Build (compiles, generates jOOQ sources from schema.sql, runs Spotless + Checkstyle)
+# Build (compiles, and generates jOOQ sources from schema.sql -- no live
+# database needed for this step, schema.sql is read directly)
 mvn clean install
 
 # Run
@@ -117,6 +122,16 @@ mvn spring-boot:run
 ```
 
 The app starts on `http://localhost:8080`.
+
+Spotless and Checkstyle are **not** bound to `mvn clean install` -- run
+them explicitly:
+
+```bash
+mvn spotless:apply          # auto-format
+mvn spotless:check          # verify formatting, no changes
+mvn checkstyle:check        # verify style (Sun ruleset: 80-column lines,
+                             # Javadoc required on every src/main member)
+```
 
 ### Docker
 
@@ -159,3 +174,7 @@ roughly 90-100 seconds end to end.
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for how these packages compose
 into the two main request flows (answering a chat message, searching
 chats), and [`API.md`](API.md) for the full HTTP API reference.
+
+## License
+
+BSD 3-Clause -- see [`LICENSE`](LICENSE).
