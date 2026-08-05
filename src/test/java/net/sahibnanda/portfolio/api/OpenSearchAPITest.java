@@ -114,6 +114,21 @@ class OpenSearchAPITest {
   }
 
   @Test
+  void upsertDocumentAllowsNullFieldValueToLeaveFieldUnset() {
+    String documentId = ("doc-" + UlidCreator.getUlid()).toLowerCase();
+
+    assertThatCode(
+        () -> openSearchAPI.upsertDocument(OpenSearchIndexDocumentOptions
+            .builder().indexName(indexName).documentId(documentId)
+            .document(OpenSearchDocumentField.indexed("title",
+                OpenSearchFieldType.TEXT), "Untitled")
+            .document(OpenSearchDocumentField.indexed("views",
+                OpenSearchFieldType.INTEGER), null)
+            .build()))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
   void upsertDocumentRejectsBlankDocumentId() {
     assertThatThrownBy(() -> openSearchAPI.upsertDocument(
         OpenSearchIndexDocumentOptions.builder().indexName(indexName)

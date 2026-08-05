@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.sahibnanda.portfolio.dto.ChatObserverDTO;
 import net.sahibnanda.portfolio.entity.ChatEntity;
 import net.sahibnanda.portfolio.entity.Message;
+import net.sahibnanda.portfolio.entity.Role;
 import net.sahibnanda.portfolio.enums.ChatObserverStatus;
 import net.sahibnanda.portfolio.exception.ChatNotFoundException;
 import net.sahibnanda.portfolio.exception.DatabaseOperationException;
@@ -134,7 +135,11 @@ public class JooqChatRepository implements ChatRepository {
   }
 
   /**
-   * Replaces the messages stored for a chat.
+   * Replaces the messages stored for a chat. Publishes a
+   * {@link ChatObserverStatus#CHAT_MESSAGE_SAVED_USER} or
+   * {@link ChatObserverStatus#CHAT_MESSAGE_SAVED_ASSISTANT} event matching the
+   * role of the most recently timestamped message in {@code messages}, or no
+   * event at all if {@code messages} is empty.
    *
    * @param chatId the identifier of the chat to update
    * @param messages the messages to persist for the chat
@@ -160,9 +165,11 @@ public class JooqChatRepository implements ChatRepository {
     if (updated == 0) {
       throw new ChatNotFoundException(chatId);
     }
-    chatRepositoryObserver.notifyAllObservers(ChatObserverDTO.builder()
-        .chatId(chatId).messages(sortedMessages).updatedAt(now)
-        .status(ChatObserverStatus.CHAT_MESSAGE_SAVED).build());
+    if (!sortedMessages.isEmpty()) {
+      chatRepositoryObserver.notifyAllObservers(ChatObserverDTO.builder()
+          .chatId(chatId).messages(sortedMessages).updatedAt(now)
+          .status(messageSavedStatus(sortedMessages.getLast())).build());
+    }
   }
 
   /**
@@ -218,6 +225,21 @@ public class JooqChatRepository implements ChatRepository {
     chatRepositoryObserver.notifyAllObservers(
         ChatObserverDTO.builder().chatId(chatId).chatTitle(title).updatedAt(now)
             .status(ChatObserverStatus.CHAT_TITLE_UPDATED).build());
+  }
+
+  /**
+   * The event status for a message-saved notification, based on who authored
+   * the most recently saved message.
+   *
+   * @param lastMessage the most recently timestamped message in the list just
+   *        persisted
+   * @return {@link ChatObserverStatus#CHAT_MESSAGE_SAVED_USER} or
+   *         {@link ChatObserverStatus#CHAT_MESSAGE_SAVED_ASSISTANT}
+   */
+  private ChatObserverStatus messageSavedStatus(final Message lastMessage) {
+    return lastMessage.role() == Role.USER
+        ? ChatObserverStatus.CHAT_MESSAGE_SAVED_USER
+        : ChatObserverStatus.CHAT_MESSAGE_SAVED_ASSISTANT;
   }
 
   private ChatEntity toEntity(final ChatsRecord chatRecord) {

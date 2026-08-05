@@ -11,8 +11,11 @@ public enum ChatObserverStatus {
   /** A new chat was created. */
   CHAT_CREATED,
 
-  /** A chat's messages were saved. */
-  CHAT_MESSAGE_SAVED,
+  /** A user-authored message was saved to a chat. */
+  CHAT_MESSAGE_SAVED_USER,
+
+  /** An assistant-authored message was saved to a chat. */
+  CHAT_MESSAGE_SAVED_ASSISTANT,
 
   /** A chat was deleted. */
   CHAT_DELETED,

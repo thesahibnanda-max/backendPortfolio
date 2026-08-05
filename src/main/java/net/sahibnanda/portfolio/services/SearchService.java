@@ -1,0 +1,310 @@
+package net.sahibnanda.portfolio.services;
+
+import jakarta.annotation.PostConstruct;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
+
+import lombok.extern.slf4j.Slf4j;
+import net.sahibnanda.portfolio.api.OpenSearchAPI;
+import net.sahibnanda.portfolio.config.ChatObserverProperties;
+import net.sahibnanda.portfolio.config.SearchProperties;
+import net.sahibnanda.portfolio.config.UserObserverProperties;
+import net.sahibnanda.portfolio.dto.ChatObserverDTO;
+import net.sahibnanda.portfolio.entity.Message;
+import net.sahibnanda.portfolio.entity.Role;
+import net.sahibnanda.portfolio.enums.OpenSearchExactQueryType;
+import net.sahibnanda.portfolio.enums.OpenSearchFieldType;
+import net.sahibnanda.portfolio.models.OpenSearchDocumentField;
+import net.sahibnanda.portfolio.models.OpenSearchExactQueryCondition;
+import net.sahibnanda.portfolio.models.OpenSearchSearchHit;
+import net.sahibnanda.portfolio.models.OpenSearchSearchResult;
+import net.sahibnanda.portfolio.options.OpenSearchCreateIndexOptions;
+import net.sahibnanda.portfolio.options.OpenSearchIndexDocumentOptions;
+import net.sahibnanda.portfolio.options.OpenSearchSearchOptions;
+import net.sahibnanda.portfolio.queue.Kafka;
+import net.sahibnanda.portfolio.utils.StringUtils;
+import org.springframework.stereotype.Service;
+
+/**
+ * Indexes chat lifecycle events into OpenSearch for full-text search. Consumes
+ * {@link ChatObserverDTO} events published by
+ * {@link net.sahibnanda.portfolio.repository.observers.ChatRepositoryObserver}
+ * and upserts one OpenSearch document per chat title and per message, keyed so
+ * later events for the same chat/message merge into the same document instead
+ * of creating duplicates.
+ *
+ * <p>
+ * Document id scheme: a chat's title document is keyed {@code <chatId>#TITLE};
+ * each message document is keyed
+ * {@code <chatId>#<USER_MESSAGE|ASSISTANT_MESSAGE>#<epoch millis>}.
+ */
+@Slf4j
+@Service
+public class SearchService {
+
+  /**
+   * Document field name for the owning chat's id.
+   */
+  private static final String CHAT_ID_KEY = "chatId";
+
+  /**
+   * Document field name for the chat owner's username.
+   */
+  private static final String USERNAME_KEY = "username";
+
+  /**
+   * Document field name for which kind of document this is.
+   */
+  private static final String TYPE_KEY = "type";
+
+  /**
+   * Document field name for the indexed text (title or message content).
+   */
+  private static final String CONTENT_KEY = "content";
+
+  /**
+   * {@link #TYPE_KEY} value for a chat's title document.
+   */
+  private static final String TYPE_TITLE = "TITLE";
+
+  /**
+   * {@link #TYPE_KEY} value for a user-authored message document.
+   */
+  private static final String TYPE_USER_MESSAGE = "USER_MESSAGE";
+
+  /**
+   * {@link #TYPE_KEY} value for an assistant-authored message document.
+   */
+  private static final String TYPE_ASSISTANT_MESSAGE = "ASSISTANT_MESSAGE";
+
+  /**
+   * Retries per record given to {@link Kafka#startConsumer}.
+   */
+  private static final int CONSUMER_RETRY_COUNT = 3;
+
+  /**
+   * Upper bound on documents deleted for one chat (its title document plus one
+   * per message) -- generous enough that no real chat would exceed it.
+   */
+  private static final int MAX_CHAT_DOCUMENTS = 10_000;
+
+  /**
+   * Mapping/document field for {@link #CHAT_ID_KEY}.
+   */
+  private static final OpenSearchDocumentField CHAT_ID_FIELD =
+      OpenSearchDocumentField.indexed(CHAT_ID_KEY, OpenSearchFieldType.KEYWORD);
+
+  /**
+   * Mapping/document field for {@link #USERNAME_KEY}.
+   */
+  private static final OpenSearchDocumentField USERNAME_FIELD =
+      OpenSearchDocumentField.indexed(USERNAME_KEY,
+          OpenSearchFieldType.KEYWORD);
+
+  /**
+   * Mapping/document field for {@link #TYPE_KEY}.
+   */
+  private static final OpenSearchDocumentField TYPE_FIELD =
+      OpenSearchDocumentField.indexed(TYPE_KEY, OpenSearchFieldType.KEYWORD);
+
+  /**
+   * Mapping/document field for {@link #CONTENT_KEY}.
+   */
+  private static final OpenSearchDocumentField CONTENT_FIELD =
+      OpenSearchDocumentField.indexed(CONTENT_KEY, OpenSearchFieldType.TEXT);
+
+  /**
+   * Publishes to and consumes from Kafka.
+   */
+  private final Kafka kafka;
+
+  /**
+   * Indexes documents into OpenSearch.
+   */
+  private final OpenSearchAPI openSearchAPI;
+
+  /**
+   * The Kafka topics user lifecycle events are published to.
+   */
+  private final UserObserverProperties userObserverProperties;
+
+  /**
+   * The Kafka topics chat lifecycle events are published to.
+   */
+  private final ChatObserverProperties chatObserverProperties;
+
+  /**
+   * Index name and shard/replica settings for the chat search index.
+   */
+  private final SearchProperties searchProperties;
+
+  /**
+   * Creates a new search service and ensures the chat search index exists.
+   *
+   * @param kafkaClient publishes to and consumes from Kafka
+   * @param openSearchClient indexes documents into OpenSearch
+   * @param userProperties the Kafka topics user lifecycle events are published
+   *        to
+   * @param chatProperties the Kafka topics chat lifecycle events are published
+   *        to
+   * @param searchConfig index name and shard/replica settings for the chat
+   *        search index
+   */
+  public SearchService(final Kafka kafkaClient,
+      final OpenSearchAPI openSearchClient,
+      final UserObserverProperties userProperties,
+      final ChatObserverProperties chatProperties,
+      final SearchProperties searchConfig) {
+    this.kafka =
+        Objects.requireNonNull(kafkaClient, "kafkaClient must not be null");
+    this.openSearchAPI = Objects.requireNonNull(openSearchClient,
+        "openSearchClient must not be null");
+    this.userObserverProperties = Objects.requireNonNull(userProperties,
+        "userProperties must not be null");
+    this.chatObserverProperties = Objects.requireNonNull(chatProperties,
+        "chatProperties must not be null");
+    this.searchProperties =
+        Objects.requireNonNull(searchConfig, "searchConfig must not be null");
+
+    openSearchAPI.createIndexIfNotExists(OpenSearchCreateIndexOptions.builder()
+        .indexName(searchProperties.chatIndexName())
+        .numberOfShards(searchProperties.chatNumberOfShards())
+        .numberOfReplicas(searchProperties.chatNumberOfReplicas())
+        .mapping(CHAT_ID_FIELD).mapping(USERNAME_FIELD).mapping(TYPE_FIELD)
+        .mapping(CONTENT_FIELD).build());
+    log.debug("Ensured OpenSearch chat index exists: {}",
+        searchProperties.chatIndexName());
+  }
+
+  /**
+   * Subscribes to every configured chat-observer Kafka topic and indexes each
+   * event into OpenSearch. Registered in {@code @PostConstruct} rather than the
+   * constructor since it starts long-running consumer threads.
+   */
+  @PostConstruct
+  public void startConsumer() {
+    for (String topic : chatObserverProperties.kafkaTopics().keySet()) {
+      kafka.startConsumer(topic, CONSUMER_RETRY_COUNT, ChatObserverDTO.class,
+          (eventId, dto) -> handleChatEvent(dto));
+    }
+  }
+
+  private void handleChatEvent(final ChatObserverDTO dto) {
+    if (dto == null) {
+      throw new IllegalStateException("Received a null chat observer event");
+    }
+    if (dto.getStatus() == null) {
+      throw new IllegalStateException(
+          "Chat observer event has no status: " + dto);
+    }
+    if (StringUtils.isEmpty(dto.getChatId())) {
+      throw new IllegalStateException(
+          "Chat observer event has no chatId: " + dto);
+    }
+    switch (dto.getStatus()) {
+      case CHAT_CREATED -> handleChatCreatedEvent(dto);
+      case CHAT_TITLE_UPDATED -> handleChatTitleUpdatedEvent(dto);
+      case CHAT_MESSAGE_SAVED_USER ->
+        indexMessage(dto, Role.USER, TYPE_USER_MESSAGE);
+      case CHAT_MESSAGE_SAVED_ASSISTANT ->
+        indexMessage(dto, Role.ASSISTANT, TYPE_ASSISTANT_MESSAGE);
+      case CHAT_DELETED -> handleChatDeletedEvent(dto);
+      default ->
+        log.warn("Unhandled chat observer status: {}", dto.getStatus());
+    }
+  }
+
+  /**
+   * Deletes every OpenSearch document belonging to a deleted chat -- its title
+   * document and every message document.
+   *
+   * @param dto the chat deleted event
+   */
+  private void handleChatDeletedEvent(final ChatObserverDTO dto) {
+    OpenSearchSearchResult result = openSearchAPI.search(OpenSearchSearchOptions
+        .builder().indexName(searchProperties.chatIndexName())
+        .filter(OpenSearchExactQueryCondition.builder()
+            .type(OpenSearchExactQueryType.TERM).field(CHAT_ID_KEY)
+            .value(dto.getChatId()).build())
+        .size(MAX_CHAT_DOCUMENTS).build());
+
+    result.getHits().stream().map(OpenSearchSearchHit::getId)
+        .forEach(documentId -> openSearchAPI.deleteDocumentIfExists(
+            searchProperties.chatIndexName(), documentId));
+  }
+
+  private void handleChatCreatedEvent(final ChatObserverDTO dto) {
+    openSearchAPI.upsertDocument(OpenSearchIndexDocumentOptions.builder()
+        .indexName(searchProperties.chatIndexName())
+        .documentId(titleDocumentId(dto.getChatId()))
+        .document(CHAT_ID_FIELD, dto.getChatId())
+        .document(USERNAME_FIELD, dto.getUsername())
+        .document(TYPE_FIELD, TYPE_TITLE)
+        .document(CONTENT_FIELD, dto.getChatTitle()).build());
+  }
+
+  /**
+   * Updates a chat's title document. Only {@link #CONTENT_KEY} is set --
+   * {@link #CHAT_ID_KEY}/{@link #USERNAME_KEY}/{@link #TYPE_KEY} never change
+   * for a title document, and {@code upsertDocument} merges rather than
+   * replaces, so the original values are left untouched.
+   *
+   * @param dto the chat title updated event
+   */
+  private void handleChatTitleUpdatedEvent(final ChatObserverDTO dto) {
+    openSearchAPI.upsertDocument(OpenSearchIndexDocumentOptions.builder()
+        .indexName(searchProperties.chatIndexName())
+        .documentId(titleDocumentId(dto.getChatId()))
+        .document(CONTENT_FIELD, dto.getChatTitle()).build());
+  }
+
+  /**
+   * Indexes the most recently saved message of the given role.
+   *
+   * @param dto the message-saved event
+   * @param role which author's message to index
+   * @param type the {@link #TYPE_KEY} value to tag the document with
+   * @throws IllegalStateException if {@code dto} carries no message of the
+   *         given role
+   */
+  private void indexMessage(final ChatObserverDTO dto, final Role role,
+      final String type) {
+    Message message = mostRecentMessageByRole(dto, role);
+    openSearchAPI.upsertDocument(OpenSearchIndexDocumentOptions.builder()
+        .indexName(searchProperties.chatIndexName())
+        .documentId(
+            messageDocumentId(dto.getChatId(), type, message.timestamp()))
+        .document(CHAT_ID_FIELD, dto.getChatId())
+        .document(USERNAME_FIELD, dto.getUsername()).document(TYPE_FIELD, type)
+        .document(CONTENT_FIELD, message.message()).build());
+  }
+
+  private Message mostRecentMessageByRole(final ChatObserverDTO dto,
+      final Role role) {
+    List<Message> messages = dto.getMessages();
+    if (messages == null || messages.isEmpty()) {
+      throw new IllegalStateException(
+          "Expected messages on a message-saved event for chat "
+              + dto.getChatId());
+    }
+    // Messages are stored oldest-first; the first role match after
+    // reversing is the most recently saved message of that role. Null
+    // elements are treated as malformed data, not a match, rather than
+    // trusting every entry the consumer deserialized off Kafka.
+    return messages.reversed().stream().filter(Objects::nonNull)
+        .filter(candidate -> candidate.role() == role).findFirst()
+        .orElseThrow(() -> new IllegalStateException("Expected a " + role
+            + " message on a message-saved event for chat " + dto.getChatId()));
+  }
+
+  private String titleDocumentId(final String chatId) {
+    return chatId + "#" + TYPE_TITLE;
+  }
+
+  private String messageDocumentId(final String chatId, final String type,
+      final Instant timestamp) {
+    return chatId + "#" + type + "#" + timestamp.toEpochMilli();
+  }
+}

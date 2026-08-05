@@ -94,3 +94,8 @@ opensearch:
   username: ${OPENSEARCH_USERNAME:admin}
   password: ${OPENSEARCH_PASSWORD:admin}
   https: ${OPENSEARCH_HTTPS:false}
+
+search-service:
+  chat-index-name: chat_index_document
+  chat-number-of-shards: 3
+  chat-number-of-replicas: 1

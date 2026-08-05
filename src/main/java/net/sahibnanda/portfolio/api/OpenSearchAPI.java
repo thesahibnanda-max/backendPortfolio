@@ -229,8 +229,12 @@ public final class OpenSearchAPI {
     }
     validateFieldTypes(document);
 
-    Map<String, Object> source = document.entrySet().stream().collect(Collectors
-        .toMap(entry -> entry.getKey().getFieldName(), Map.Entry::getValue));
+    // Collectors.toMap rejects null values (it merges via Map.merge, which
+    // throws on a null value); a plain map tolerates them, and a null field
+    // value here is a deliberate "don't set this field" signal, not an
+    // error.
+    Map<String, Object> source = new LinkedHashMap<>();
+    document.forEach((field, value) -> source.put(field.getFieldName(), value));
     String documentId = opts.getDocumentId();
 
     try {
