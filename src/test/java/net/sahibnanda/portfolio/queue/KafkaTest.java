@@ -131,6 +131,11 @@ class KafkaTest {
   }
 
   @Test
+  void pingSucceedsAgainstARealBroker() {
+    assertThatCode(kafka::ping).doesNotThrowAnyException();
+  }
+
+  @Test
   void createTopicIfNotExistsIsIdempotent() {
     assertThatCode(() -> kafka.createTopicIfNotExists(topicName, 1, (short) 1))
         .doesNotThrowAnyException();

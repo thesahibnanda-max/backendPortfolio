@@ -122,6 +122,17 @@ public final class Kafka {
   }
 
   /**
+   * Checks Kafka connectivity by asking the admin client to describe the
+   * cluster -- no topic or consumer involved.
+   *
+   * @throws KafkaOperationException if the cluster is unreachable or the call
+   *         times out
+   */
+  public void ping() {
+    await(admin.describeCluster().nodes());
+  }
+
+  /**
    * Creates a topic if it doesn't already exist.
    *
    * @param topicName the topic to create

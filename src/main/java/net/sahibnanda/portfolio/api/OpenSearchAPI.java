@@ -178,6 +178,23 @@ public final class OpenSearchAPI {
   }
 
   /**
+   * Checks OpenSearch connectivity.
+   *
+   * @throws OpenSearchOperationException if OpenSearch is unreachable or
+   *         responds negatively
+   */
+  public void ping() {
+    try {
+      if (!openSearchClient.ping().value()) {
+        throw new OpenSearchOperationException(
+            "OpenSearch ping returned false.");
+      }
+    } catch (OpenSearchException | IOException e) {
+      throw new OpenSearchOperationException("Failed to ping OpenSearch.", e);
+    }
+  }
+
+  /**
    * Deletes an index if it exists.
    *
    * @param indexName the index to delete

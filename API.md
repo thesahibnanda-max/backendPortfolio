@@ -20,7 +20,7 @@ Every endpoint shares the same error-response shape:
 
 | Field | Type | Description |
 |---|---|---|
-| `showMessageAsIs` | boolean | `true` for client-caused errors (400/401/403/404/409/429) -- `errorMessage` is the real, specific cause, safe to show a user as-is. `false` for 500/502 -- `errorMessage` is a generic, safe placeholder, not the real internal error. |
+| `showMessageAsIs` | boolean | `true` for client-caused errors (400/401/403/404/409/429) and for `/health`'s 503 -- `errorMessage` is the real, specific cause, safe to show a user as-is. `false` for 500/502 -- `errorMessage` is a generic, safe placeholder, not the real internal error. |
 | `errorMessage` | string | The message itself -- specific when `showMessageAsIs` is `true`, generic otherwise. |
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md#error-handling) for the full
@@ -418,7 +418,8 @@ ranking and scoping to the caller's own chats work.
 
 ### `GET /health`
 
-Checks database connectivity. **No auth required.** No request body.
+Checks connectivity to every infrastructure dependency (Postgres, Valkey,
+Kafka, OpenSearch). **No auth required.** No request body.
 
 **Example**
 
@@ -432,10 +433,10 @@ curl -i http://localhost:8080/health
 {}
 ```
 
-An empty body confirms the database is reachable.
+An empty body confirms every dependency is reachable.
 
 **Errors**
 
 | Status | Cause |
 |---|---|
-| 500 | The database is unreachable |
+| 503 | One or more dependencies failed to respond; `errorMessage` names which ones (e.g. `"Health check failed for: postgres, kafka"`) |

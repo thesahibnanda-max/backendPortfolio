@@ -65,6 +65,11 @@ class OpenSearchAPITest {
   }
 
   @Test
+  void pingSucceedsAgainstARealCluster() {
+    assertThatCode(openSearchAPI::ping).doesNotThrowAnyException();
+  }
+
+  @Test
   void createIndexIfNotExistsIsIdempotent() {
     assertThatCode(() -> openSearchAPI.createIndexIfNotExists(
         OpenSearchCreateIndexOptions.builder().indexName(indexName).build()))

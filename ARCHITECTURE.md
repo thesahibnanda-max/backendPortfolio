@@ -191,6 +191,7 @@ switch is the single, centralized place that decides HTTP status:
 | `CodeforcesCallException` | 502 Bad Gateway | No |
 | `LeetcodeCallException` | 502 Bad Gateway | No |
 | `ProfileCallException` | 502 Bad Gateway | No |
+| `HealthCheckException` | 503 Service Unavailable | Yes (names the failed dependencies, e.g. "postgres, kafka") |
 | Any other `RepositoryException` subtype, or anything unrecognized | 500 Internal Server Error | No |
 
 Errors the caller isn't shown the real message for still get a generic,

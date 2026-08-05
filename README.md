@@ -60,10 +60,11 @@ docker run -d --name kafka -p 9092:9092 \
   -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 \
   apache/kafka:3.9.0
 
-# OpenSearch (security plugin's demo admin/admin credentials)
+# OpenSearch (security plugin disabled for local dev -- the app's default
+# admin/admin credentials are sent but ignored, since there's no auth layer)
 docker run -d --name opensearch -p 9200:9200 -p 9600:9600 \
   -e discovery.type=single-node \
-  -e OPENSEARCH_INITIAL_ADMIN_PASSWORD=admin \
+  -e DISABLE_SECURITY_PLUGIN=true \
   opensearchproject/opensearch:latest
 
 # Valkey
@@ -106,9 +107,9 @@ suitable for local development. Set them via `prod.env` (or your own
 | `GITHUB_BASE_URL` | `https://api.github.com` | GitHub API base URL |
 | `PROFILE_JSON_RETREIVAL_URL` | Supabase storage URL | Where the resume/profile JSON is fetched from |
 | `PERSONALITY_JSON_RETREIVAL_URL` | Supabase storage URL | Where the personality JSON is fetched from |
-| `DETAILS_LEETCODE_USERNAMES` | `imsahibnanda` | LeetCode username(s) the `/health`-adjacent details services report on |
-| `DETAILS_CODEFORCES_USERNAMES` | `shisukenohara` | Codeforces username(s) |
-| `DETAILS_GITHUB_USERNAMES` | `thesahibnanda-max,thesahibnanda` | GitHub username(s) |
+| `DETAILS_LEETCODE_USERNAMES` | `imsahibnanda` | LeetCode username(s) `DetailsService` fetches profile data for -- feeds the `LEETCODE` context domain the Orchestrator/Worker AI can draw on |
+| `DETAILS_CODEFORCES_USERNAMES` | `shisukenohara` | Codeforces username(s) -- feeds the `CODEFORCES` context domain |
+| `DETAILS_GITHUB_USERNAMES` | `thesahibnanda-max,thesahibnanda` | GitHub username(s) -- feeds the `GITHUB` context domain |
 
 ## Build & run
 

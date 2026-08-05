@@ -11,6 +11,7 @@ import net.sahibnanda.portfolio.exception.DatabaseOperationException;
 import net.sahibnanda.portfolio.exception.DuplicateUsernameException;
 import net.sahibnanda.portfolio.exception.GitHubCallException;
 import net.sahibnanda.portfolio.exception.GroqCallException;
+import net.sahibnanda.portfolio.exception.HealthCheckException;
 import net.sahibnanda.portfolio.exception.InvalidCredentialsException;
 import net.sahibnanda.portfolio.exception.InvalidEmailException;
 import net.sahibnanda.portfolio.exception.InvalidPasswordException;
@@ -115,7 +116,7 @@ public class Core {
   /** Configuration for encrypting/decrypting auth tokens. */
   private final AuthProperties authProperties;
 
-  /** Checks database connectivity for the health endpoint. */
+  /** Checks every infrastructure dependency for the health endpoint. */
   private final CronPingService cronPingService;
 
   /** Enforces per-API and per-username rate limits. */
@@ -156,7 +157,8 @@ public class Core {
    * @param orchestrator routes chat requests to the appropriate worker
    * @param worker executes chat requests against the configured LLM
    * @param authConfig configuration for encrypting/decrypting auth tokens
-   * @param pingService checks database connectivity for the health endpoint
+   * @param pingService checks every infrastructure dependency for the health
+   *        endpoint
    * @param limitService enforces per-API and per-username rate limits
    * @param searcher searches the requesting user's chats
    */
@@ -387,14 +389,16 @@ public class Core {
   }
 
   /**
-   * Checks database connectivity.
+   * Checks connectivity to every infrastructure dependency (Postgres, Valkey,
+   * Kafka, OpenSearch).
    *
-   * @return a plain {@link ResponsePOJO} with status 200 if the database is
-   *         reachable, or an {@link ErrorResponsePOJO} describing the failure
+   * @return a plain {@link ResponsePOJO} with status 200 if every dependency is
+   *         reachable, or a 503 {@link ErrorResponsePOJO} naming the
+   *         dependencies that failed to respond
    */
   public ResponsePOJO health() {
     try {
-      cronPingService.pingDatabase();
+      cronPingService.ping();
       return ResponsePOJO.builder().httpStatusCode(HttpStatus.OK)
           .timestamp(LocalDateTime.now()).build();
     } catch (Exception e) {
@@ -475,6 +479,12 @@ public class Core {
       case CodeforcesCallException _ -> upstreamError();
       case LeetcodeCallException _ -> upstreamError();
       case ProfileCallException _ -> upstreamError();
+
+      // /health's whole purpose is telling the caller which dependency is
+      // down; the message only ever names infra types (e.g. "postgres,
+      // kafka"), so it's safe to expose as-is.
+      case HealthCheckException _ ->
+        knownError(HttpStatus.SERVICE_UNAVAILABLE, exception);
 
       // Safety net for a future RepositoryException subtype not yet
       // given its own case above.

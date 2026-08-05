@@ -12,12 +12,7 @@ class CronPingServiceTest extends AbstractRepositoryIntegrationTest {
   private CronPingService cronPingService;
 
   @Test
-  void pingDatabaseSucceedsAgainstARealDatabase() {
-    assertThatCode(cronPingService::pingDatabase).doesNotThrowAnyException();
-  }
-
-  @Test
-  void pingDoesNotThrowEvenThoughItRunsBothChecks() {
+  void pingSucceedsWhenEveryDependencyIsHealthy() {
     assertThatCode(cronPingService::ping).doesNotThrowAnyException();
   }
 }
