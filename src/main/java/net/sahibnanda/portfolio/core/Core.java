@@ -26,6 +26,7 @@ import net.sahibnanda.portfolio.exception.TokenException;
 import net.sahibnanda.portfolio.exception.UserNotFoundException;
 import net.sahibnanda.portfolio.exception.ValkeyCacheException;
 import net.sahibnanda.portfolio.objects.ChatObject;
+import net.sahibnanda.portfolio.objects.ChatSearchResult;
 import net.sahibnanda.portfolio.objects.OrchestratorResponse;
 import net.sahibnanda.portfolio.objects.UserObject;
 import net.sahibnanda.portfolio.pojo.ChatRequestPOJO;
@@ -34,11 +35,14 @@ import net.sahibnanda.portfolio.pojo.ErrorResponsePOJO;
 import net.sahibnanda.portfolio.pojo.ListOfChatResponsePOJO;
 import net.sahibnanda.portfolio.pojo.RequestPOJO;
 import net.sahibnanda.portfolio.pojo.ResponsePOJO;
+import net.sahibnanda.portfolio.pojo.SearchRequestPOJO;
+import net.sahibnanda.portfolio.pojo.SearchResponsePOJO;
 import net.sahibnanda.portfolio.pojo.UserGateRequestPOJO;
 import net.sahibnanda.portfolio.pojo.UserGateResponsePOJO;
 import net.sahibnanda.portfolio.services.CronPingService;
 import net.sahibnanda.portfolio.services.OrchestratorService;
 import net.sahibnanda.portfolio.services.RateLimitService;
+import net.sahibnanda.portfolio.services.SearchService;
 import net.sahibnanda.portfolio.services.UserChatService;
 import net.sahibnanda.portfolio.services.WorkerService;
 import net.sahibnanda.portfolio.utils.StringUtils;
@@ -48,9 +52,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Wires the Gate (sign-up/login), Orchestrator, and Worker AI services into the
@@ -93,6 +100,9 @@ public class Core {
   /** API name used to key {@link #userPrompt}'s rate limit. */
   private static final String API_USER_PROMPT = "userPrompt";
 
+  /** API name used to key {@link #searchChat}'s rate limit. */
+  private static final String API_SEARCH_CHAT = "searchChat";
+
   /** Handles user sign-up and login against the users table. */
   private final UserChatService userChatService;
 
@@ -110,6 +120,9 @@ public class Core {
 
   /** Enforces per-API and per-username rate limits. */
   private final RateLimitService rateLimitService;
+
+  /** Searches the requesting user's chats. */
+  private final SearchService searchService;
 
   /**
    * How many requests are allowed for an API, and over what window.
@@ -132,7 +145,8 @@ public class Core {
           new RateLimitRule(30, 60), API_CREATE_CHAT, new RateLimitRule(30, 60),
           API_ALL_CHATS, new RateLimitRule(30, 60), API_GET_CHAT_BY_ID,
           new RateLimitRule(30, 60), API_UPDATE_TITLE,
-          new RateLimitRule(30, 60), API_USER_PROMPT, new RateLimitRule(5, 60));
+          new RateLimitRule(30, 60), API_USER_PROMPT, new RateLimitRule(5, 60),
+          API_SEARCH_CHAT, new RateLimitRule(30, 60));
 
   /**
    * Constructs a new {@code Core} wiring the Gate, Orchestrator, and Worker
@@ -144,11 +158,12 @@ public class Core {
    * @param authConfig configuration for encrypting/decrypting auth tokens
    * @param pingService checks database connectivity for the health endpoint
    * @param limitService enforces per-API and per-username rate limits
+   * @param searcher searches the requesting user's chats
    */
   public Core(final UserChatService chatService,
       final OrchestratorService orchestrator, final WorkerService worker,
       final AuthProperties authConfig, final CronPingService pingService,
-      final RateLimitService limitService) {
+      final RateLimitService limitService, final SearchService searcher) {
     this.userChatService =
         Objects.requireNonNull(chatService, "userChatService is null");
     this.orchestratorService =
@@ -161,6 +176,8 @@ public class Core {
         Objects.requireNonNull(pingService, "cronPingService is null");
     this.rateLimitService =
         Objects.requireNonNull(limitService, "rateLimitService is null");
+    this.searchService =
+        Objects.requireNonNull(searcher, "searchService is null");
   }
 
   /**
@@ -333,6 +350,37 @@ public class Core {
       ChatObject updatedChat = userChatService.saveAssistantMessage(username,
           request.getChatId(), answer);
       return buildChatResponse(HttpStatus.OK, updatedChat);
+    } catch (Exception e) {
+      return buildErrorResponse(e);
+    }
+  }
+
+  /**
+   * Searches the requesting user's chats.
+   *
+   * @param request the auth-token header and search text
+   * @return a {@link SearchResponsePOJO} with matching chats (highest score
+   *         first) and their scores, or an {@link ErrorResponsePOJO} describing
+   *         the failure
+   */
+  public ResponsePOJO searchChat(final SearchRequestPOJO request) {
+    try {
+      String username = extractUsername(request);
+      enforceRateLimit(API_SEARCH_CHAT, username);
+      List<ChatSearchResult> results =
+          searchService.processUserQuery(username, request.getQuery());
+      Map<String, ChatObject> chatsById =
+          userChatService.listChats(username).stream().collect(
+              Collectors.toMap(ChatObject::getChatId, Function.identity()));
+      List<ChatObject> chats =
+          results.stream().map(result -> chatsById.get(result.getChatId()))
+              .filter(Objects::nonNull).toList();
+      Map<String, Double> scores = results.stream()
+          .collect(Collectors.toMap(ChatSearchResult::getChatId,
+              ChatSearchResult::getScore, (first, second) -> first,
+              LinkedHashMap::new));
+      return SearchResponsePOJO.builder().httpStatusCode(HttpStatus.OK)
+          .timestamp(LocalDateTime.now()).chats(chats).scores(scores).build();
     } catch (Exception e) {
       return buildErrorResponse(e);
     }

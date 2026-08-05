@@ -3,6 +3,7 @@ package net.sahibnanda.portfolio.controller;
 import net.sahibnanda.portfolio.core.Core;
 import net.sahibnanda.portfolio.pojo.ChatRequestPOJO;
 import net.sahibnanda.portfolio.pojo.ResponsePOJO;
+import net.sahibnanda.portfolio.pojo.SearchRequestPOJO;
 import net.sahibnanda.portfolio.pojo.UserGateRequestPOJO;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
@@ -146,6 +147,21 @@ public class Controller {
   }
 
   /**
+   * Searches the requesting user's chats.
+   *
+   * @param authToken the caller's {@code X-Auth-Token}
+   * @param request the search text
+   * @return matching chats and their relevance scores, or a failure response
+   */
+  @PostMapping("/chats/search")
+  public ResponseEntity<ResponsePOJO> searchChat(
+      @RequestHeader(value = X_AUTH_TOKEN,
+          required = false) final String authToken,
+      @RequestBody final SearchRequestPOJO request) {
+    return toResponseEntity(core.searchChat(withAuthToken(request, authToken)));
+  }
+
+  /**
    * Checks database connectivity.
    *
    * @return 200 if the database is reachable, or a failure response
@@ -157,6 +173,13 @@ public class Controller {
 
   private static ChatRequestPOJO withAuthToken(final ChatRequestPOJO request,
       final String authToken) {
+    Map<String, String> headers =
+        authToken == null ? Map.of() : Map.of(X_AUTH_TOKEN, authToken);
+    return request.toBuilder().headers(headers).build();
+  }
+
+  private static SearchRequestPOJO withAuthToken(
+      final SearchRequestPOJO request, final String authToken) {
     Map<String, String> headers =
         authToken == null ? Map.of() : Map.of(X_AUTH_TOKEN, authToken);
     return request.toBuilder().headers(headers).build();

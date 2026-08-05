@@ -9,6 +9,8 @@ import net.sahibnanda.portfolio.pojo.ChatResponsePOJO;
 import net.sahibnanda.portfolio.pojo.ErrorResponsePOJO;
 import net.sahibnanda.portfolio.pojo.ListOfChatResponsePOJO;
 import net.sahibnanda.portfolio.pojo.ResponsePOJO;
+import net.sahibnanda.portfolio.pojo.SearchRequestPOJO;
+import net.sahibnanda.portfolio.pojo.SearchResponsePOJO;
 import net.sahibnanda.portfolio.pojo.UserGateRequestPOJO;
 import net.sahibnanda.portfolio.repository.AbstractRepositoryIntegrationTest;
 import net.sahibnanda.portfolio.utils.StringUtils;
@@ -186,6 +188,46 @@ class CoreTest extends AbstractRepositoryIntegrationTest {
   }
 
   @Test
+  void searchChatReturnsMatchingChatsSortedByScore() {
+    // searchChat's rate-limit keys, like userPrompt's, live in the shared
+    // Valkey instance and aren't reset between test runs -- clear them so
+    // this test's budget always starts fresh.
+    valkeyCache.delete("searchChat");
+    valkeyCache.delete("searchChat:mia");
+    String token = signUpAndGetToken("mia");
+    createChat(token, "Kyoto travel itinerary");
+
+    SearchResponsePOJO response =
+        awaitSearchResults(token, "kyoto travel itinerary");
+
+    assertThat(response.getHttpStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getChats()).isNotEmpty();
+    String chatId = response.getChats().get(0).getChatId();
+    assertThat(response.getScores()).containsKey(chatId);
+  }
+
+  @Test
+  void searchChatWithBlankQueryReturnsBadRequestError() {
+    valkeyCache.delete("searchChat");
+    valkeyCache.delete("searchChat:noah");
+    String token = signUpAndGetToken("noah");
+
+    ResponsePOJO response = core.searchChat(SearchRequestPOJO.builder()
+        .headers(Map.of(AUTH_HEADER, token)).query(" ").build());
+
+    assertThat(response.getHttpStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(((ErrorResponsePOJO) response).getShowMessageAsIs()).isTrue();
+  }
+
+  @Test
+  void searchChatWithoutAuthTokenReturnsUnauthorizedError() {
+    ResponsePOJO response =
+        core.searchChat(SearchRequestPOJO.builder().query("anything").build());
+
+    assertThat(response.getHttpStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
+  @Test
   void createChatWithoutAuthTokenReturnsUnauthorizedError() {
     ResponsePOJO response =
         core.createChat(ChatRequestPOJO.builder().chatTitle("My Chat").build());
@@ -242,6 +284,38 @@ class CoreTest extends AbstractRepositoryIntegrationTest {
   private ResponsePOJO createChat(final String token, final String title) {
     return core.createChat(ChatRequestPOJO.builder()
         .headers(Map.of(AUTH_HEADER, token)).chatTitle(title).build());
+  }
+
+  // Indexing into OpenSearch happens asynchronously via Kafka after
+  // createChat returns, so a search immediately afterward can miss it --
+  // poll until a match shows up or the deadline passes. searchChat is
+  // rate-limited (30 calls/60s, shared globally across every caller of
+  // this method and every test), so this polls slowly rather than
+  // busy-looping -- a tight retry loop would exhaust that budget within
+  // a single test and start failing unrelated later tests with 429s.
+  private SearchResponsePOJO awaitSearchResults(final String token,
+      final String query) {
+    long deadline = System.currentTimeMillis() + 20_000;
+    while (System.currentTimeMillis() < deadline) {
+      ResponsePOJO response = core.searchChat(SearchRequestPOJO.builder()
+          .headers(Map.of(AUTH_HEADER, token)).query(query).build());
+      if (response instanceof SearchResponsePOJO searchResponse
+          && !searchResponse.getChats().isEmpty()) {
+        return searchResponse;
+      }
+      sleepQuietly();
+    }
+    throw new AssertionError(
+        "No search results for query \"" + query + "\" within timeout");
+  }
+
+  private void sleepQuietly() {
+    try {
+      Thread.sleep(2_000);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new AssertionError("Interrupted while polling", e);
+    }
   }
 
   private String signUpAndGetToken(final String username) {
