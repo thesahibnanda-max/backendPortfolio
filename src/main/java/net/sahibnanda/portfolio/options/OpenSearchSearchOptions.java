@@ -78,4 +78,22 @@ public class OpenSearchSearchOptions {
    * OpenSearch's default.
    */
   private Boolean trackTotalHits;
+
+  /**
+   * Field to collapse results on (one hit per value, highest-scoring first), or
+   * {@code null} for no collapsing.
+   */
+  private String collapseField;
+
+  /**
+   * Whether to gather term/document frequency statistics across every shard
+   * before scoring ({@code dfs_query_then_fetch}), instead of the default
+   * per-shard statistics ({@code query_then_fetch}). Per-shard statistics can
+   * rank two otherwise-identical documents very differently depending on which
+   * shard they land on -- enable this when relative ranking (e.g. relevance
+   * boosts between document types) needs to be reliable, at the cost of an
+   * extra round trip. {@code null} uses OpenSearch's default
+   * ({@code query_then_fetch}).
+   */
+  private Boolean distributedTermFrequency;
 }

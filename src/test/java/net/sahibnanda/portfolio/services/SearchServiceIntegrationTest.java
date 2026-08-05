@@ -1,6 +1,7 @@
 package net.sahibnanda.portfolio.services;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -18,6 +19,7 @@ import net.sahibnanda.portfolio.enums.ChatObserverStatus;
 import net.sahibnanda.portfolio.enums.OpenSearchExactQueryType;
 import net.sahibnanda.portfolio.enums.UserObserverStatus;
 import net.sahibnanda.portfolio.models.OpenSearchExactQueryCondition;
+import net.sahibnanda.portfolio.objects.ChatSearchResult;
 import net.sahibnanda.portfolio.options.OpenSearchSearchOptions;
 import net.sahibnanda.portfolio.queue.Kafka;
 import net.sahibnanda.portfolio.repository.AbstractRepositoryIntegrationTest;
@@ -208,6 +210,110 @@ class SearchServiceIntegrationTest extends AbstractRepositoryIntegrationTest {
     assertThat(source.get("content")).isEqualTo("Still Works");
   }
 
+  // Each processUserQuery test uses its own freshly generated username,
+  // never "alice" -- OpenSearch documents are never cleaned between tests
+  // in this file (only Postgres CHATS/USERS are truncated), so a query
+  // scoped to a shared username would see every other test's accumulated
+  // chats too, and OR-matching on common words (e.g. "unique") would pull
+  // in unrelated results.
+
+  @Test
+  void searchFindsExactPhraseMatchRankedFirst() {
+    String username = "user-" + StringUtils.generateUlid();
+    userRepository.create(username, "hashed-pw");
+    String exactChatId = StringUtils.generateUlid();
+    String typoChatId = StringUtils.generateUlid();
+    chatRepository.create(exactChatId, username, "kyoto travel itinerary",
+        List.of());
+    chatRepository.create(typoChatId, username, "kyotoo trvael itinerery",
+        List.of());
+    awaitDocument(exactChatId + "#TITLE");
+    awaitDocument(typoChatId + "#TITLE");
+
+    List<ChatSearchResult> results =
+        searchService.processUserQuery(username, "kyoto travel itinerary");
+
+    assertThat(results).isNotEmpty();
+    assertThat(results.getFirst().getChatId()).isEqualTo(exactChatId);
+  }
+
+  @Test
+  void searchOnlyReturnsCallingUsersChats() {
+    String owner = "user-" + StringUtils.generateUlid();
+    String other = "user-" + StringUtils.generateUlid();
+    userRepository.create(owner, "hashed-pw");
+    userRepository.create(other, "hashed-pw");
+    String ownerChatId = StringUtils.generateUlid();
+    String otherChatId = StringUtils.generateUlid();
+    chatRepository.create(ownerChatId, owner, "unique query phrase xyz123",
+        List.of());
+    chatRepository.create(otherChatId, other, "unique query phrase xyz123",
+        List.of());
+    awaitDocument(ownerChatId + "#TITLE");
+    awaitDocument(otherChatId + "#TITLE");
+
+    List<ChatSearchResult> results =
+        searchService.processUserQuery(owner, "unique query phrase xyz123");
+
+    assertThat(results).extracting(ChatSearchResult::getChatId)
+        .containsOnly(ownerChatId);
+  }
+
+  @Test
+  void searchBoostsTitleAboveMessages() {
+    String username = "user-" + StringUtils.generateUlid();
+    userRepository.create(username, "hashed-pw");
+    String titleMatchChatId = StringUtils.generateUlid();
+    String messageMatchChatId = StringUtils.generateUlid();
+    chatRepository.create(titleMatchChatId, username, "banana smoothie recipe",
+        List.of());
+    chatRepository.create(messageMatchChatId, username, "Something else",
+        List.of());
+    awaitDocument(titleMatchChatId + "#TITLE");
+    awaitDocument(messageMatchChatId + "#TITLE");
+    chatRepository.saveMessages(messageMatchChatId, List
+        .of(new Message(Role.USER, "banana smoothie recipe", Instant.now())));
+    awaitDocumentByType(messageMatchChatId, "USER_MESSAGE");
+
+    List<ChatSearchResult> results =
+        searchService.processUserQuery(username, "banana smoothie recipe");
+
+    assertThat(results).isNotEmpty();
+    assertThat(results.getFirst().getChatId()).isEqualTo(titleMatchChatId);
+  }
+
+  @Test
+  void searchCollapsesMultipleMatchingMessagesToOneChatEntry() {
+    String username = "user-" + StringUtils.generateUlid();
+    userRepository.create(username, "hashed-pw");
+    String chatId = StringUtils.generateUlid();
+    chatRepository.create(chatId, username, "Chat 1", List.of());
+    awaitDocument(chatId + "#TITLE");
+    chatRepository.saveMessages(chatId, List.of(new Message(Role.USER,
+        "unique collapse test phrase one", Instant.now())));
+    chatRepository.saveMessages(chatId, List.of(new Message(Role.USER,
+        "unique collapse test phrase two", Instant.now())));
+    awaitMessageCount(chatId, "USER_MESSAGE", 2);
+
+    List<ChatSearchResult> results =
+        searchService.processUserQuery(username, "unique collapse test phrase");
+
+    assertThat(results).extracting(ChatSearchResult::getChatId)
+        .containsOnlyOnce(chatId);
+  }
+
+  @Test
+  void searchRejectsBlankQuery() {
+    assertThatThrownBy(() -> searchService.processUserQuery("alice", " "))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void searchRejectsBlankUsername() {
+    assertThatThrownBy(() -> searchService.processUserQuery(" ", "query"))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
   private Map<String, Object> awaitDocument(final String documentId) {
     long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MILLIS;
     while (System.currentTimeMillis() < deadline) {
@@ -257,6 +363,27 @@ class SearchServiceIntegrationTest extends AbstractRepositoryIntegrationTest {
     }
     throw new AssertionError("No " + type + " document indexed for chat "
         + chatId + " within timeout");
+  }
+
+  private void awaitMessageCount(final String chatId, final String type,
+      final int expectedCount) {
+    long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MILLIS;
+    while (System.currentTimeMillis() < deadline) {
+      var result = openSearchAPI.search(OpenSearchSearchOptions.builder()
+          .indexName(searchProperties.chatIndexName())
+          .filter(OpenSearchExactQueryCondition.builder()
+              .type(OpenSearchExactQueryType.TERM).field("chatId").value(chatId)
+              .build())
+          .filter(OpenSearchExactQueryCondition.builder()
+              .type(OpenSearchExactQueryType.TERM).field("type").value(type)
+              .build())
+          .build());
+      if (result.getHits().size() >= expectedCount) {
+        return;
+      }
+    }
+    throw new AssertionError("Never saw " + expectedCount + " " + type
+        + " documents for chat " + chatId + " within timeout");
   }
 
   private void assertNoDocumentsForChat(final String chatId) {

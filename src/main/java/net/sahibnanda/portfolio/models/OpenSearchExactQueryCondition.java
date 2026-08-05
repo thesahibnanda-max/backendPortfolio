@@ -40,4 +40,10 @@ public class OpenSearchExactQueryCondition implements OpenSearchQueryCondition {
 
   /** Fuzziness, e.g. {@code "AUTO"} or {@code "2"} -- {@code FUZZY} only. */
   private String fuzziness;
+
+  /**
+   * Relevance boost for this condition, or {@code null} for the default --
+   * {@code TERM} only.
+   */
+  private Float boost;
 }

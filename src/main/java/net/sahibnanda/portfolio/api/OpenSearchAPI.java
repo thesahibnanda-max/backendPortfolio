@@ -42,6 +42,7 @@ import org.opensearch.client.json.JsonData;
 import org.opensearch.client.opensearch.OpenSearchClient;
 import org.opensearch.client.opensearch._types.FieldValue;
 import org.opensearch.client.opensearch._types.OpenSearchException;
+import org.opensearch.client.opensearch._types.SearchType;
 import org.opensearch.client.opensearch._types.SortOptions;
 import org.opensearch.client.opensearch._types.SortOrder;
 import org.opensearch.client.opensearch._types.aggregations.Aggregate;
@@ -331,6 +332,12 @@ public final class OpenSearchAPI {
             if (opts.getTrackTotalHits() != null) {
               s.trackTotalHits(t -> t.enabled(opts.getTrackTotalHits()));
             }
+            if (!StringUtils.isEmpty(opts.getCollapseField())) {
+              s.collapse(c -> c.field(opts.getCollapseField()));
+            }
+            if (Boolean.TRUE.equals(opts.getDistributedTermFrequency())) {
+              s.searchType(SearchType.DfsQueryThenFetch);
+            }
             return s;
           }, DOCUMENT_CLASS);
 
@@ -543,6 +550,7 @@ public final class OpenSearchAPI {
         if (c.getCaseInsensitive() != null) {
           t.caseInsensitive(c.getCaseInsensitive());
         }
+        ifPresent(c.getBoost(), t::boost);
         return t;
       }));
       case TERMS -> Query.of(q -> q.terms(t -> t.field(c.getField())

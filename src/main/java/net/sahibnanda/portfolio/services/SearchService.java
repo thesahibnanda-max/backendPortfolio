@@ -17,10 +17,14 @@ import net.sahibnanda.portfolio.entity.Message;
 import net.sahibnanda.portfolio.entity.Role;
 import net.sahibnanda.portfolio.enums.OpenSearchExactQueryType;
 import net.sahibnanda.portfolio.enums.OpenSearchFieldType;
+import net.sahibnanda.portfolio.enums.OpenSearchFullTextQueryType;
+import net.sahibnanda.portfolio.enums.OpenSearchQueryOperator;
 import net.sahibnanda.portfolio.models.OpenSearchDocumentField;
 import net.sahibnanda.portfolio.models.OpenSearchExactQueryCondition;
+import net.sahibnanda.portfolio.models.OpenSearchFullTextQueryCondition;
 import net.sahibnanda.portfolio.models.OpenSearchSearchHit;
 import net.sahibnanda.portfolio.models.OpenSearchSearchResult;
+import net.sahibnanda.portfolio.objects.ChatSearchResult;
 import net.sahibnanda.portfolio.options.OpenSearchCreateIndexOptions;
 import net.sahibnanda.portfolio.options.OpenSearchIndexDocumentOptions;
 import net.sahibnanda.portfolio.options.OpenSearchSearchOptions;
@@ -98,6 +102,36 @@ public class SearchService {
    * {@code search_phase_execution_exception}.
    */
   private static final int MAX_DELETE_BATCH_SIZE = 10_000;
+
+  /**
+   * Upper bound on chats returned by {@link #processUserQuery}.
+   */
+  private static final int SEARCH_RESULT_LIMIT = 20;
+
+  /**
+   * Full-match bonus for {@link #processUserQuery}'s should-clauses.
+   */
+  private static final float PHRASE_MATCH_BOOST = 8f;
+
+  /**
+   * Prefix-match bonus for {@link #processUserQuery}'s should-clauses.
+   */
+  private static final float PREFIX_MATCH_BOOST = 4f;
+
+  /**
+   * {@link #TYPE_TITLE} relevance boost.
+   */
+  private static final float TITLE_BOOST = 3f;
+
+  /**
+   * {@link #TYPE_USER_MESSAGE} relevance boost.
+   */
+  private static final float USER_MESSAGE_BOOST = 1.5f;
+
+  /**
+   * {@link #TYPE_ASSISTANT_MESSAGE} relevance boost.
+   */
+  private static final float ASSISTANT_MESSAGE_BOOST = 1.2f;
 
   /**
    * Mapping/document field for {@link #CHAT_ID_KEY}.
@@ -213,6 +247,77 @@ public class SearchService {
     }
   }
 
+  /**
+   * Searches a user's chats, ranking full phrase matches highest, then prefix
+   * matches, then any match containing the query terms, then typo-tolerant
+   * matches -- with title documents boosted above user messages, boosted just
+   * slightly above assistant messages. Each chat appears at most once,
+   * represented by its single highest-scoring document. Scoped to the given
+   * user's chats via {@link #findChatIdsOwnedBy}, not a direct field filter --
+   * see that method for why. Uses distributed term frequency (an extra round
+   * trip) so the type boosts above rank consistently -- with the chat index's
+   * multiple shards, per-shard term statistics can otherwise score two
+   * textually-identical documents differently enough to swamp a small, fixed
+   * boost.
+   *
+   * @param username the chat owner to search within
+   * @param query the search text
+   * @return matching chats, highest score first, capped at
+   *         {@link #SEARCH_RESULT_LIMIT}
+   * @throws IllegalArgumentException if either argument is blank
+   */
+  public List<ChatSearchResult> processUserQuery(final String username,
+      final String query) {
+    if (StringUtils.isEmpty(username)) {
+      throw new IllegalArgumentException("username must not be empty");
+    }
+    if (StringUtils.isEmpty(query)) {
+      throw new IllegalArgumentException("query must not be empty");
+    }
+    String processedQuery = query.toLowerCase().trim();
+
+    List<Object> chatIds = findChatIdsOwnedBy(username);
+    if (chatIds.isEmpty()) {
+      return List.of();
+    }
+
+    OpenSearchSearchResult result = openSearchAPI.search(OpenSearchSearchOptions
+        .builder().indexName(searchProperties.chatIndexName())
+        .filter(OpenSearchExactQueryCondition.builder()
+            .type(OpenSearchExactQueryType.TERMS).field(CHAT_ID_KEY)
+            .values(chatIds).build())
+        .must(OpenSearchFullTextQueryCondition.builder()
+            .type(OpenSearchFullTextQueryType.MATCH)
+            .fields(List.of(CONTENT_KEY)).queryText(processedQuery)
+            .operator(OpenSearchQueryOperator.OR).fuzziness("AUTO").build())
+        .should(OpenSearchFullTextQueryCondition.builder()
+            .type(OpenSearchFullTextQueryType.MATCH_PHRASE)
+            .fields(List.of(CONTENT_KEY)).queryText(processedQuery)
+            .boost(PHRASE_MATCH_BOOST).build())
+        .should(OpenSearchFullTextQueryCondition.builder()
+            .type(OpenSearchFullTextQueryType.MATCH_PHRASE_PREFIX)
+            .fields(List.of(CONTENT_KEY)).queryText(processedQuery)
+            .boost(PREFIX_MATCH_BOOST).build())
+        .should(OpenSearchExactQueryCondition.builder()
+            .type(OpenSearchExactQueryType.TERM).field(TYPE_KEY)
+            .value(TYPE_TITLE).boost(TITLE_BOOST).build())
+        .should(OpenSearchExactQueryCondition.builder()
+            .type(OpenSearchExactQueryType.TERM).field(TYPE_KEY)
+            .value(TYPE_USER_MESSAGE).boost(USER_MESSAGE_BOOST).build())
+        .should(OpenSearchExactQueryCondition.builder()
+            .type(OpenSearchExactQueryType.TERM).field(TYPE_KEY)
+            .value(TYPE_ASSISTANT_MESSAGE).boost(ASSISTANT_MESSAGE_BOOST)
+            .build())
+        .collapseField(CHAT_ID_KEY).distributedTermFrequency(true)
+        .size(SEARCH_RESULT_LIMIT).build());
+
+    return result.getHits().stream()
+        .map(hit -> ChatSearchResult.builder()
+            .chatId((String) hit.getSource().get(CHAT_ID_KEY))
+            .score(hit.getScore() == null ? 0.0 : hit.getScore()).build())
+        .toList();
+  }
+
   private void handleUserEvent(final UserObserverDTO dto) {
     if (dto == null) {
       throw new IllegalStateException("Received a null user observer event");
@@ -242,31 +347,10 @@ public class SearchService {
    * deleted, so no per-chat {@code CHAT_DELETED} event is published for them;
    * this is the only place that cleanup happens.
    *
-   * <p>
-   * Routed through each chat's id rather than a direct {@link #USERNAME_KEY}
-   * lookup: message documents are indexed from
-   * {@code CHAT_MESSAGE_SAVED_USER}/{@code _ASSISTANT} events, whose
-   * {@link ChatObserverDTO#getUsername()} is always {@code null} by that DTO's
-   * own documented design -- so {@link #USERNAME_KEY} is only ever reliably set
-   * on a chat's title document, never on its message documents.
-   *
    * @param dto the user deleted event
    */
   private void handleUserDeletedEvent(final UserObserverDTO dto) {
-    OpenSearchSearchResult titleDocuments =
-        openSearchAPI.search(OpenSearchSearchOptions.builder()
-            .indexName(searchProperties.chatIndexName())
-            .filter(OpenSearchExactQueryCondition.builder()
-                .type(OpenSearchExactQueryType.TERM).field(USERNAME_KEY)
-                .value(dto.getUsername()).build())
-            .filter(OpenSearchExactQueryCondition.builder()
-                .type(OpenSearchExactQueryType.TERM).field(TYPE_KEY)
-                .value(TYPE_TITLE).build())
-            .size(MAX_DELETE_BATCH_SIZE).build());
-
-    List<Object> chatIds = titleDocuments.getHits().stream()
-        .map(hit -> hit.getSource().get(CHAT_ID_KEY)).filter(Objects::nonNull)
-        .toList();
+    List<Object> chatIds = findChatIdsOwnedBy(dto.getUsername());
     if (chatIds.isEmpty()) {
       return;
     }
@@ -282,6 +366,35 @@ public class SearchService {
     chatDocuments.getHits().stream().map(OpenSearchSearchHit::getId)
         .forEach(documentId -> openSearchAPI.deleteDocumentIfExists(
             searchProperties.chatIndexName(), documentId));
+  }
+
+  /**
+   * Finds the ids of every chat owned by a user, via their title documents --
+   * the only document kind {@link #USERNAME_KEY} is reliably set on. Message
+   * documents are indexed from
+   * {@code CHAT_MESSAGE_SAVED_USER}/{@code _ASSISTANT} events, whose
+   * {@link ChatObserverDTO#getUsername()} is always {@code null} by that DTO's
+   * own documented design, so a direct {@link #USERNAME_KEY} lookup would miss
+   * them.
+   *
+   * @param username the chat owner to look up
+   * @return the owned chat ids, empty if the user owns no chats
+   */
+  private List<Object> findChatIdsOwnedBy(final String username) {
+    OpenSearchSearchResult titleDocuments =
+        openSearchAPI.search(OpenSearchSearchOptions.builder()
+            .indexName(searchProperties.chatIndexName())
+            .filter(OpenSearchExactQueryCondition.builder()
+                .type(OpenSearchExactQueryType.TERM).field(USERNAME_KEY)
+                .value(username).build())
+            .filter(OpenSearchExactQueryCondition.builder()
+                .type(OpenSearchExactQueryType.TERM).field(TYPE_KEY)
+                .value(TYPE_TITLE).build())
+            .size(MAX_DELETE_BATCH_SIZE).build());
+
+    return titleDocuments.getHits().stream()
+        .map(hit -> hit.getSource().get(CHAT_ID_KEY)).filter(Objects::nonNull)
+        .toList();
   }
 
   private void handleChatEvent(final ChatObserverDTO dto) {
