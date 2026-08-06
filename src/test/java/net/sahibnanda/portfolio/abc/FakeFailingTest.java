@@ -6,8 +6,10 @@ import org.junit.jupiter.api.Test;
 
 class FakeFailingTest {
 
-    @Test
-    void failTest() {assertEquals(1, 2, "1 != 2");}
+  @Test
+  void failTest() {
+    assertEquals(1, 2, "1 != 2");
+  }
 
 
 }
