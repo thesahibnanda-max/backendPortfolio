@@ -28,14 +28,24 @@ import net.sahibnanda.portfolio.exception.UserNotFoundException;
 import net.sahibnanda.portfolio.exception.ValkeyCacheException;
 import net.sahibnanda.portfolio.objects.ChatObject;
 import net.sahibnanda.portfolio.objects.ChatSearchResult;
+import net.sahibnanda.portfolio.objects.CodeforcesDetails;
+import net.sahibnanda.portfolio.objects.GitHubDetails;
+import net.sahibnanda.portfolio.objects.LeetcodeDetails;
 import net.sahibnanda.portfolio.objects.OrchestratorResponse;
+import net.sahibnanda.portfolio.objects.PersonalityDetails;
 import net.sahibnanda.portfolio.objects.ProfessionalDetails;
+import net.sahibnanda.portfolio.objects.ProfileDetails;
 import net.sahibnanda.portfolio.objects.UserObject;
 import net.sahibnanda.portfolio.pojo.ChatRequestPOJO;
 import net.sahibnanda.portfolio.pojo.ChatResponsePOJO;
+import net.sahibnanda.portfolio.pojo.CodeforcesDetailsResponsePOJO;
 import net.sahibnanda.portfolio.pojo.ErrorResponsePOJO;
+import net.sahibnanda.portfolio.pojo.GitHubDetailsResponsePOJO;
+import net.sahibnanda.portfolio.pojo.LeetcodeDetailsResponsePOJO;
 import net.sahibnanda.portfolio.pojo.ListOfChatResponsePOJO;
+import net.sahibnanda.portfolio.pojo.PersonalityDetailsResponsePOJO;
 import net.sahibnanda.portfolio.pojo.ProfessionalDetailsResponsePOJO;
+import net.sahibnanda.portfolio.pojo.ProfileDetailsResponsePOJO;
 import net.sahibnanda.portfolio.pojo.RequestPOJO;
 import net.sahibnanda.portfolio.pojo.ResponsePOJO;
 import net.sahibnanda.portfolio.pojo.SearchRequestPOJO;
@@ -110,6 +120,21 @@ public class Core {
   /** API name used to key {@link #professionalDetails}'s rate limit. */
   private static final String API_PROFESSIONAL_DETAILS = "professionalDetails";
 
+  /** API name used to key {@link #leetcodeDetails}'s rate limit. */
+  private static final String API_LEETCODE_DETAILS = "leetcodeDetails";
+
+  /** API name used to key {@link #codeforcesDetails}'s rate limit. */
+  private static final String API_CODEFORCES_DETAILS = "codeforcesDetails";
+
+  /** API name used to key {@link #githubDetails}'s rate limit. */
+  private static final String API_GITHUB_DETAILS = "githubDetails";
+
+  /** API name used to key {@link #personalityDetails}'s rate limit. */
+  private static final String API_PERSONALITY_DETAILS = "personalityDetails";
+
+  /** API name used to key {@link #profileDetails}'s rate limit. */
+  private static final String API_PROFILE_DETAILS = "profileDetails";
+
   /** Handles user sign-up and login against the users table. */
   private final UserChatService userChatService;
 
@@ -151,13 +176,20 @@ public class Core {
    * the one most worth guarding on a free-tier Groq plan.
    */
   private static final Map<String, RateLimitRule> RATE_LIMITS =
-      Map.of(API_SIGN_UP, new RateLimitRule(30, 60), API_LOGIN,
-          new RateLimitRule(30, 60), API_CREATE_CHAT, new RateLimitRule(30, 60),
-          API_ALL_CHATS, new RateLimitRule(30, 60), API_GET_CHAT_BY_ID,
-          new RateLimitRule(30, 60), API_UPDATE_TITLE,
-          new RateLimitRule(30, 60), API_USER_PROMPT, new RateLimitRule(5, 60),
-          API_SEARCH_CHAT, new RateLimitRule(30, 60), API_PROFESSIONAL_DETAILS,
-          new RateLimitRule(30, 60));
+      Map.ofEntries(Map.entry(API_SIGN_UP, new RateLimitRule(30, 60)),
+          Map.entry(API_LOGIN, new RateLimitRule(30, 60)),
+          Map.entry(API_CREATE_CHAT, new RateLimitRule(30, 60)),
+          Map.entry(API_ALL_CHATS, new RateLimitRule(30, 60)),
+          Map.entry(API_GET_CHAT_BY_ID, new RateLimitRule(30, 60)),
+          Map.entry(API_UPDATE_TITLE, new RateLimitRule(30, 60)),
+          Map.entry(API_USER_PROMPT, new RateLimitRule(5, 60)),
+          Map.entry(API_SEARCH_CHAT, new RateLimitRule(30, 60)),
+          Map.entry(API_PROFESSIONAL_DETAILS, new RateLimitRule(30, 60)),
+          Map.entry(API_LEETCODE_DETAILS, new RateLimitRule(30, 60)),
+          Map.entry(API_CODEFORCES_DETAILS, new RateLimitRule(30, 60)),
+          Map.entry(API_GITHUB_DETAILS, new RateLimitRule(30, 60)),
+          Map.entry(API_PERSONALITY_DETAILS, new RateLimitRule(30, 60)),
+          Map.entry(API_PROFILE_DETAILS, new RateLimitRule(30, 60)));
 
   /**
    * Constructs a new {@code Core} wiring the Gate, Orchestrator, and Worker
@@ -434,6 +466,100 @@ public class Core {
       return ProfessionalDetailsResponsePOJO.builder()
           .httpStatusCode(HttpStatus.OK).timestamp(LocalDateTime.now())
           .professionalDetails(details).build();
+    } catch (Exception e) {
+      return buildErrorResponse(e);
+    }
+  }
+
+  /**
+   * Returns details for every configured LeetCode account.
+   *
+   * @return a {@link LeetcodeDetailsResponsePOJO} with the LeetCode details, or
+   *         an {@link ErrorResponsePOJO} describing the failure
+   */
+  public ResponsePOJO leetcodeDetails() {
+    try {
+      enforceGlobalRateLimit(API_LEETCODE_DETAILS);
+      List<LeetcodeDetails> details = Objects
+          .requireNonNullElse(detailsService.getLeetcodeDetails(), List.of());
+      return LeetcodeDetailsResponsePOJO.builder().httpStatusCode(HttpStatus.OK)
+          .timestamp(LocalDateTime.now()).leetcodeDetails(details).build();
+    } catch (Exception e) {
+      return buildErrorResponse(e);
+    }
+  }
+
+  /**
+   * Returns details for every configured Codeforces account.
+   *
+   * @return a {@link CodeforcesDetailsResponsePOJO} with the Codeforces
+   *         details, or an {@link ErrorResponsePOJO} describing the failure
+   */
+  public ResponsePOJO codeforcesDetails() {
+    try {
+      enforceGlobalRateLimit(API_CODEFORCES_DETAILS);
+      List<CodeforcesDetails> details = Objects
+          .requireNonNullElse(detailsService.getCodeforcesDetails(), List.of());
+      return CodeforcesDetailsResponsePOJO.builder()
+          .httpStatusCode(HttpStatus.OK).timestamp(LocalDateTime.now())
+          .codeforcesDetails(details).build();
+    } catch (Exception e) {
+      return buildErrorResponse(e);
+    }
+  }
+
+  /**
+   * Returns details for every configured GitHub account.
+   *
+   * @return a {@link GitHubDetailsResponsePOJO} with the GitHub details, or an
+   *         {@link ErrorResponsePOJO} describing the failure
+   */
+  public ResponsePOJO githubDetails() {
+    try {
+      enforceGlobalRateLimit(API_GITHUB_DETAILS);
+      List<GitHubDetails> details = Objects
+          .requireNonNullElse(detailsService.getGithubDetails(), List.of());
+      return GitHubDetailsResponsePOJO.builder().httpStatusCode(HttpStatus.OK)
+          .timestamp(LocalDateTime.now()).githubDetails(details).build();
+    } catch (Exception e) {
+      return buildErrorResponse(e);
+    }
+  }
+
+  /**
+   * Returns the portfolio owner's personality profile.
+   *
+   * @return a {@link PersonalityDetailsResponsePOJO} with the personality
+   *         details, or an {@link ErrorResponsePOJO} describing the failure
+   */
+  public ResponsePOJO personalityDetails() {
+    try {
+      enforceGlobalRateLimit(API_PERSONALITY_DETAILS);
+      PersonalityDetails details =
+          Objects.requireNonNull(detailsService.getPersonalityDetails(),
+              "getPersonalityDetails() returned null");
+      return PersonalityDetailsResponsePOJO.builder()
+          .httpStatusCode(HttpStatus.OK).timestamp(LocalDateTime.now())
+          .personalityDetails(details).build();
+    } catch (Exception e) {
+      return buildErrorResponse(e);
+    }
+  }
+
+  /**
+   * Returns the portfolio owner's profile.
+   *
+   * @return a {@link ProfileDetailsResponsePOJO} with the profile details, or
+   *         an {@link ErrorResponsePOJO} describing the failure
+   */
+  public ResponsePOJO profileDetails() {
+    try {
+      enforceGlobalRateLimit(API_PROFILE_DETAILS);
+      ProfileDetails details =
+          Objects.requireNonNull(detailsService.getProfileDetails(),
+              "getProfileDetails() returned null");
+      return ProfileDetailsResponsePOJO.builder().httpStatusCode(HttpStatus.OK)
+          .timestamp(LocalDateTime.now()).profileDetails(details).build();
     } catch (Exception e) {
       return buildErrorResponse(e);
     }

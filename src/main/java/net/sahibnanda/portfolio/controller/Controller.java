@@ -182,6 +182,56 @@ public class Controller {
     return toResponseEntity(core.professionalDetails());
   }
 
+  /**
+   * Returns details for every configured LeetCode account.
+   *
+   * @return the LeetCode details, or a failure response
+   */
+  @GetMapping("/details/leetcode")
+  public ResponseEntity<ResponsePOJO> leetcodeDetails() {
+    return toResponseEntity(core.leetcodeDetails());
+  }
+
+  /**
+   * Returns details for every configured Codeforces account.
+   *
+   * @return the Codeforces details, or a failure response
+   */
+  @GetMapping("/details/codeforces")
+  public ResponseEntity<ResponsePOJO> codeforcesDetails() {
+    return toResponseEntity(core.codeforcesDetails());
+  }
+
+  /**
+   * Returns details for every configured GitHub account.
+   *
+   * @return the GitHub details, or a failure response
+   */
+  @GetMapping("/details/github")
+  public ResponseEntity<ResponsePOJO> githubDetails() {
+    return toResponseEntity(core.githubDetails());
+  }
+
+  /**
+   * Returns the portfolio owner's personality profile.
+   *
+   * @return the personality details, or a failure response
+   */
+  @GetMapping("/details/personality")
+  public ResponseEntity<ResponsePOJO> personalityDetails() {
+    return toResponseEntity(core.personalityDetails());
+  }
+
+  /**
+   * Returns the portfolio owner's profile.
+   *
+   * @return the profile details, or a failure response
+   */
+  @GetMapping("/details/profile")
+  public ResponseEntity<ResponsePOJO> profileDetails() {
+    return toResponseEntity(core.profileDetails());
+  }
+
   private static ChatRequestPOJO withAuthToken(final ChatRequestPOJO request,
       final String authToken) {
     Map<String, String> headers =
