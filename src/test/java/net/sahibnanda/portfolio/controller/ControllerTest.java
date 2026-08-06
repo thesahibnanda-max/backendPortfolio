@@ -157,6 +157,46 @@ class ControllerTest extends AbstractRepositoryIntegrationTest {
         .andExpect(jsonPath("$.professionalDetails.resumeLink").exists());
   }
 
+  @Test
+  void leetcodeDetailsReturnsOk() throws Exception {
+    valkeyCache.delete("leetcodeDetails");
+
+    mockMvc.perform(get("/details/leetcode")).andExpect(status().isOk())
+        .andExpect(jsonPath("$.leetcodeDetails[0].username").exists());
+  }
+
+  @Test
+  void codeforcesDetailsReturnsOk() throws Exception {
+    valkeyCache.delete("codeforcesDetails");
+
+    mockMvc.perform(get("/details/codeforces")).andExpect(status().isOk())
+        .andExpect(jsonPath("$.codeforcesDetails[0].handle").exists());
+  }
+
+  @Test
+  void githubDetailsReturnsOk() throws Exception {
+    valkeyCache.delete("githubDetails");
+
+    mockMvc.perform(get("/details/github")).andExpect(status().isOk())
+        .andExpect(jsonPath("$.githubDetails[0].username").exists());
+  }
+
+  @Test
+  void personalityDetailsReturnsOk() throws Exception {
+    valkeyCache.delete("personalityDetails");
+
+    mockMvc.perform(get("/details/personality")).andExpect(status().isOk())
+        .andExpect(jsonPath("$.personalityDetails.aboutMe").exists());
+  }
+
+  @Test
+  void profileDetailsReturnsOk() throws Exception {
+    valkeyCache.delete("profileDetails");
+
+    mockMvc.perform(get("/details/profile")).andExpect(status().isOk())
+        .andExpect(jsonPath("$.profileDetails.leetcodeUsernames").exists());
+  }
+
   // Indexing into OpenSearch happens asynchronously via Kafka after chat
   // creation returns, so a search immediately afterward can miss it -- poll
   // until a match shows up or the deadline passes. /chats/search is

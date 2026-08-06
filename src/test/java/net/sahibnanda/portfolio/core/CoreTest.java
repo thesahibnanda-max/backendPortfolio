@@ -6,9 +6,14 @@ import net.sahibnanda.portfolio.cache.ValkeyCache;
 import net.sahibnanda.portfolio.config.AuthProperties;
 import net.sahibnanda.portfolio.pojo.ChatRequestPOJO;
 import net.sahibnanda.portfolio.pojo.ChatResponsePOJO;
+import net.sahibnanda.portfolio.pojo.CodeforcesDetailsResponsePOJO;
 import net.sahibnanda.portfolio.pojo.ErrorResponsePOJO;
+import net.sahibnanda.portfolio.pojo.GitHubDetailsResponsePOJO;
+import net.sahibnanda.portfolio.pojo.LeetcodeDetailsResponsePOJO;
 import net.sahibnanda.portfolio.pojo.ListOfChatResponsePOJO;
+import net.sahibnanda.portfolio.pojo.PersonalityDetailsResponsePOJO;
 import net.sahibnanda.portfolio.pojo.ProfessionalDetailsResponsePOJO;
+import net.sahibnanda.portfolio.pojo.ProfileDetailsResponsePOJO;
 import net.sahibnanda.portfolio.pojo.ResponsePOJO;
 import net.sahibnanda.portfolio.pojo.SearchRequestPOJO;
 import net.sahibnanda.portfolio.pojo.SearchResponsePOJO;
@@ -263,6 +268,136 @@ class CoreTest extends AbstractRepositoryIntegrationTest {
     ResponsePOJO response = null;
     for (int i = 0; i < 31; i++) {
       response = core.professionalDetails();
+    }
+
+    assertThat(response.getHttpStatusCode())
+        .isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+  }
+
+  @Test
+  void leetcodeDetailsReturnsOk() {
+    valkeyCache.delete("leetcodeDetails");
+
+    ResponsePOJO response = core.leetcodeDetails();
+
+    assertThat(response.getHttpStatusCode()).isEqualTo(HttpStatus.OK);
+    LeetcodeDetailsResponsePOJO details =
+        (LeetcodeDetailsResponsePOJO) response;
+    assertThat(details.getLeetcodeDetails()).isNotNull().isNotEmpty();
+    assertThat(details.getLeetcodeDetails().getFirst().getUsername())
+        .isEqualTo("imsahibnanda");
+  }
+
+  @Test
+  void leetcodeDetailsExceedingRateLimitReturnsTooManyRequests() {
+    valkeyCache.delete("leetcodeDetails");
+
+    ResponsePOJO response = null;
+    for (int i = 0; i < 31; i++) {
+      response = core.leetcodeDetails();
+    }
+
+    assertThat(response.getHttpStatusCode())
+        .isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+  }
+
+  @Test
+  void codeforcesDetailsReturnsOk() {
+    valkeyCache.delete("codeforcesDetails");
+
+    ResponsePOJO response = core.codeforcesDetails();
+
+    assertThat(response.getHttpStatusCode()).isEqualTo(HttpStatus.OK);
+    CodeforcesDetailsResponsePOJO details =
+        (CodeforcesDetailsResponsePOJO) response;
+    assertThat(details.getCodeforcesDetails()).isNotNull().isNotEmpty();
+    assertThat(details.getCodeforcesDetails().getFirst().getHandle())
+        .isEqualTo("shisukenohara");
+  }
+
+  @Test
+  void codeforcesDetailsExceedingRateLimitReturnsTooManyRequests() {
+    valkeyCache.delete("codeforcesDetails");
+
+    ResponsePOJO response = null;
+    for (int i = 0; i < 31; i++) {
+      response = core.codeforcesDetails();
+    }
+
+    assertThat(response.getHttpStatusCode())
+        .isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+  }
+
+  @Test
+  void githubDetailsReturnsOk() {
+    valkeyCache.delete("githubDetails");
+
+    ResponsePOJO response = core.githubDetails();
+
+    assertThat(response.getHttpStatusCode()).isEqualTo(HttpStatus.OK);
+    GitHubDetailsResponsePOJO details = (GitHubDetailsResponsePOJO) response;
+    assertThat(details.getGithubDetails()).isNotNull().hasSize(2);
+  }
+
+  @Test
+  void githubDetailsExceedingRateLimitReturnsTooManyRequests() {
+    valkeyCache.delete("githubDetails");
+
+    ResponsePOJO response = null;
+    for (int i = 0; i < 31; i++) {
+      response = core.githubDetails();
+    }
+
+    assertThat(response.getHttpStatusCode())
+        .isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+  }
+
+  @Test
+  void personalityDetailsReturnsOk() {
+    valkeyCache.delete("personalityDetails");
+
+    ResponsePOJO response = core.personalityDetails();
+
+    assertThat(response.getHttpStatusCode()).isEqualTo(HttpStatus.OK);
+    PersonalityDetailsResponsePOJO details =
+        (PersonalityDetailsResponsePOJO) response;
+    assertThat(details.getPersonalityDetails()).isNotNull();
+    assertThat(details.getPersonalityDetails().getAboutMe()).isNotBlank();
+  }
+
+  @Test
+  void personalityDetailsExceedingRateLimitReturnsTooManyRequests() {
+    valkeyCache.delete("personalityDetails");
+
+    ResponsePOJO response = null;
+    for (int i = 0; i < 31; i++) {
+      response = core.personalityDetails();
+    }
+
+    assertThat(response.getHttpStatusCode())
+        .isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+  }
+
+  @Test
+  void profileDetailsReturnsOk() {
+    valkeyCache.delete("profileDetails");
+
+    ResponsePOJO response = core.profileDetails();
+
+    assertThat(response.getHttpStatusCode()).isEqualTo(HttpStatus.OK);
+    ProfileDetailsResponsePOJO details = (ProfileDetailsResponsePOJO) response;
+    assertThat(details.getProfileDetails()).isNotNull();
+    assertThat(details.getProfileDetails().getLeetcodeUsernames())
+        .containsExactly("imsahibnanda");
+  }
+
+  @Test
+  void profileDetailsExceedingRateLimitReturnsTooManyRequests() {
+    valkeyCache.delete("profileDetails");
+
+    ResponsePOJO response = null;
+    for (int i = 0; i < 31; i++) {
+      response = core.profileDetails();
     }
 
     assertThat(response.getHttpStatusCode())

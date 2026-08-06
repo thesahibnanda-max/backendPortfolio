@@ -5,9 +5,9 @@ every endpoint is at the exact path shown below.
 
 All request/response bodies are JSON, `camelCase` field names. All
 non-Gate endpoints (everything except `/signup`, `/login`, `/health`, and
-`/details/professional`) require an `X-Auth-Token` header -- obtained from
-the `X-Auth-Token` **response header** of `/signup` or `/login` (the token
-is never returned in a response body).
+the six `/details/*` endpoints) require an `X-Auth-Token` header --
+obtained from the `X-Auth-Token` **response header** of `/signup` or
+`/login` (the token is never returned in a response body).
 
 Every endpoint shares the same error-response shape:
 
@@ -38,6 +38,11 @@ exception-to-status-code table.
 - [`POST /chats/search`](#post-chatssearch)
 - [`GET /health`](#get-health)
 - [`GET /details/professional`](#get-detailsprofessional)
+- [`GET /details/leetcode`](#get-detailsleetcode)
+- [`GET /details/codeforces`](#get-detailscodeforces)
+- [`GET /details/github`](#get-detailsgithub)
+- [`GET /details/personality`](#get-detailspersonality)
+- [`GET /details/profile`](#get-detailsprofile)
 
 ---
 
@@ -497,3 +502,282 @@ curl -i http://localhost:8080/details/professional
 |---|---|
 | 429 | Rate limit exceeded (30/60s, global) |
 | 502 | The LeetCode or GitHub API call failed |
+
+---
+
+### `GET /details/leetcode`
+
+Returns competitive-programming stats for every configured LeetCode
+account. **No auth required.** No request body. Rate-limited globally at
+30 requests/60s.
+
+Many fields below are genuinely nullable, not just theoretically --
+LeetCode doesn't return contest/ranking data for an account that's never
+entered a contest, for example. A `null` field is omitted from the JSON
+entirely (`spring.jackson.default-property-inclusion: non_null`), so
+treat every field as optional -- don't assume presence.
+
+**Example**
+
+```bash
+curl -i http://localhost:8080/details/leetcode
+```
+
+**Response `200 OK`**
+
+```json
+{
+  "leetcodeDetails": [
+    {
+      "username": "imsahibnanda",
+      "ranking": 48213,
+      "reputation": 12,
+      "totalSolved": 640,
+      "easySolved": 220,
+      "mediumSolved": 320,
+      "hardSolved": 100,
+      "badges": ["100 Days Badge 2026"],
+      "languageProblemsSolved": {"Java": 420, "Python": 220},
+      "advancedTagsSolved": {"Dynamic Programming": 45},
+      "intermediateTagsSolved": {"Binary Search": 60},
+      "fundamentalTagsSolved": {"Array": 300},
+      "contestRating": 1743.5,
+      "contestGlobalRanking": 128340,
+      "currentStreak": 12,
+      "totalActiveDays": 410
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `leetcodeDetails[].username` | string | Always present. |
+| `leetcodeDetails[].ranking` | integer or omitted | Global LeetCode ranking. Omitted if LeetCode has none on file. |
+| `leetcodeDetails[].reputation` | integer or omitted | Reputation score. Omitted if unavailable. |
+| `leetcodeDetails[].totalSolved` / `easySolved` / `mediumSolved` / `hardSolved` | integer or omitted | Problems solved by difficulty. Any of these can be individually omitted if that difficulty bucket isn't in the account's data. |
+| `leetcodeDetails[].badges` | array of string | Always present, possibly empty. |
+| `leetcodeDetails[].languageProblemsSolved` | object | Language name -> count. Always present, possibly empty. |
+| `leetcodeDetails[].advancedTagsSolved` / `intermediateTagsSolved` / `fundamentalTagsSolved` | object | Topic tag -> count, by difficulty tier. Always present, possibly empty. |
+| `leetcodeDetails[].contestRating` | number or omitted | Omitted entirely if the account has never entered a rated contest. |
+| `leetcodeDetails[].contestGlobalRanking` | integer or omitted | Omitted alongside `contestRating` for the same reason. |
+| `leetcodeDetails[].currentStreak` | integer or omitted | Current daily submission streak. Omitted if no calendar data is available. |
+| `leetcodeDetails[].totalActiveDays` | integer or omitted | Omitted alongside `currentStreak` for the same reason. |
+
+**Errors**
+
+| Status | Cause |
+|---|---|
+| 429 | Rate limit exceeded (30/60s, global) |
+| 502 | The LeetCode API call failed |
+
+---
+
+### `GET /details/codeforces`
+
+Returns competitive-programming stats for every configured Codeforces
+account. **No auth required.** No request body. Rate-limited globally at
+30 requests/60s.
+
+**Example**
+
+```bash
+curl -i http://localhost:8080/details/codeforces
+```
+
+**Response `200 OK`**
+
+```json
+{
+  "codeforcesDetails": [
+    {
+      "handle": "shisukenohara",
+      "currentRating": 1743,
+      "maxRating": 1810,
+      "contestsCount": 23,
+      "ratingHistory": [
+        {
+          "contestName": "Codeforces Round 1000",
+          "rank": 1204,
+          "oldRating": 1700,
+          "newRating": 1743,
+          "contestTime": "2026-07-01T18:35:00Z"
+        }
+      ]
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `codeforcesDetails[].handle` | string | Always present. |
+| `codeforcesDetails[].currentRating` | integer or omitted | Rating after the most recent rated contest. **Omitted entirely for a handle with zero rated contests** -- this is a real, reachable state, not an edge case. |
+| `codeforcesDetails[].maxRating` | integer or omitted | Omitted alongside `currentRating` for the same reason. |
+| `codeforcesDetails[].contestsCount` | integer | Always present -- `0` for a handle with no rated contests. |
+| `codeforcesDetails[].ratingHistory` | array | Always present, empty for a handle with no rated contests. Each entry has `contestName` (string), `rank` (integer), `oldRating`/`newRating` (integer), `contestTime` (ISO-8601 instant, with `Z`). |
+
+**Errors**
+
+| Status | Cause |
+|---|---|
+| 429 | Rate limit exceeded (30/60s, global) |
+| 502 | The Codeforces API call failed |
+
+---
+
+### `GET /details/github`
+
+Returns profile and repository stats for every configured GitHub
+account. **No auth required.** No request body. Rate-limited globally at
+30 requests/60s.
+
+**Example**
+
+```bash
+curl -i http://localhost:8080/details/github
+```
+
+**Response `200 OK`**
+
+```json
+{
+  "githubDetails": [
+    {
+      "username": "thesahibnanda-max",
+      "name": "Sahib Nanda",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/...",
+      "bio": "Backend engineer",
+      "publicRepos": 42,
+      "followers": 128,
+      "following": 30,
+      "htmlUrl": "https://github.com/thesahibnanda-max",
+      "repositories": [
+        {
+          "name": "backendPortfolio",
+          "description": "AI-powered portfolio chat backend",
+          "htmlUrl": "https://github.com/thesahibnanda-max/backendPortfolio",
+          "language": "Java",
+          "stars": 4,
+          "forks": 1,
+          "updatedAt": "2026-08-05T12:00:00Z"
+        }
+      ]
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `githubDetails[].username` | string | Always present. |
+| `githubDetails[].name` | string or omitted | GitHub display name. Omitted if the account hasn't set one -- a real, common state, not an edge case. |
+| `githubDetails[].avatarUrl` / `htmlUrl` | string | Always present. |
+| `githubDetails[].bio` | string or omitted | Omitted if the account has no bio set. |
+| `githubDetails[].publicRepos` / `followers` / `following` | integer | Always present (`0` if genuinely zero). |
+| `githubDetails[].repositories` | array | Always present, possibly empty (first page only). Each entry: `name`/`htmlUrl` (string, always present), `description` (string or omitted -- many repos have none), `language` (string or omitted -- a repo with no detected primary language), `stars`/`forks` (integer, always present), `updatedAt` (ISO-8601 instant). |
+
+**Errors**
+
+| Status | Cause |
+|---|---|
+| 429 | Rate limit exceeded (30/60s, global) |
+| 502 | The GitHub API call failed |
+
+---
+
+### `GET /details/personality`
+
+Returns the portfolio owner's personality profile -- interests,
+appearance, lifestyle, and a self-written biography. **No auth
+required.** No request body. Rate-limited globally at 30 requests/60s.
+
+**Example**
+
+```bash
+curl -i http://localhost:8080/details/personality
+```
+
+**Response `200 OK`**
+
+```json
+{
+  "personalityDetails": {
+    "personalProfile": {
+      "basicInfo": {"...": "..."},
+      "physicalAppearance": {"...": "..."},
+      "personality": {"...": "..."},
+      "interests": {"...": "..."},
+      "favorites": {"...": "..."},
+      "lifestyle": {"...": "..."},
+      "languages": {"...": "..."}
+    },
+    "aboutMe": "I'm a backend engineer who..."
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `personalityDetails.personalProfile` | object or omitted | The hosted personality JSON's full contents (appearance, personality, interests, favorites, lifestyle, languages). Omitted if the hosted document is unavailable. |
+| `personalityDetails.aboutMe` | string or omitted | Self-written biography, as recorded on the primary LeetCode account. Omitted if unset there. |
+
+**Errors**
+
+| Status | Cause |
+|---|---|
+| 429 | Rate limit exceeded (30/60s, global) |
+| 502 | The LeetCode or profile-JSON call failed |
+
+---
+
+### `GET /details/profile`
+
+Returns the portfolio owner's resume-equivalent profile: experience,
+education, projects, skills, and achievements. **No auth required.** No
+request body. Rate-limited globally at 30 requests/60s.
+
+**Example**
+
+```bash
+curl -i http://localhost:8080/details/profile
+```
+
+**Response `200 OK`**
+
+```json
+{
+  "profileDetails": {
+    "profileDetails": {"name": "Sahib Nanda", "email": "..."},
+    "projects": [{"...": "..."}],
+    "languages": ["English", "Hindi"],
+    "achievements": ["..."],
+    "experience": [{"...": "..."}],
+    "education": [{"...": "..."}],
+    "skillsByCategory": {"Backend": ["Java", "Spring Boot"]},
+    "leetcodeUsernames": ["imsahibnanda"],
+    "codeforcesUsernames": ["shisukenohara"],
+    "githubUsernames": ["thesahibnanda-max", "thesahibnanda"],
+    "linkedinUrl": "https://linkedin.com/in/...",
+    "twitterUrl": "https://twitter.com/...",
+    "websites": ["https://portfolio-sahib-nanda.vercel.app/"],
+    "countryName": "India"
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `profileDetails.profileDetails` | object or omitted | Basic identity (`name`, `email`). Omitted if the hosted profile JSON is missing this key. |
+| `profileDetails.projects` / `experience` / `education` | array or omitted | Sourced directly from the hosted profile JSON -- omitted if that document doesn't define the key, not guaranteed to be an empty array. |
+| `profileDetails.languages` / `achievements` | array or omitted | Same as above. |
+| `profileDetails.skillsByCategory` | object or omitted | Category name -> list of skills. Omitted if undefined in the hosted document. |
+| `profileDetails.leetcodeUsernames` / `codeforcesUsernames` / `githubUsernames` | array of string | Always present -- sourced from this app's own configuration, not the hosted document. |
+| `profileDetails.linkedinUrl` / `twitterUrl` / `websites` / `countryName` | string / array / string, or omitted | As recorded on the primary LeetCode account. Omitted if unset there, exactly like `ProfessionalDetails.websites`/`twitterUrl`. |
+
+**Errors**
+
+| Status | Cause |
+|---|---|
+| 429 | Rate limit exceeded (30/60s, global) |
+| 502 | The LeetCode or profile-JSON call failed |
