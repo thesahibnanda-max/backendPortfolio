@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import net.sahibnanda.portfolio.cache.ValkeyCache;
 import net.sahibnanda.portfolio.repository.AbstractRepositoryIntegrationTest;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -28,6 +29,16 @@ class ControllerTest extends AbstractRepositoryIntegrationTest {
 
   @Autowired
   private ValkeyCache valkeyCache;
+
+  // createChat's global rate-limit key is deliberately saturated by
+  // createChatExceedingRateLimitReturns429WithRetryAfterHeader below --
+  // reset it before every test so that doesn't leak a spent budget into
+  // whichever test happens to run next in the same 60s window.
+  @BeforeEach
+  void resetCreateChatRateLimit() {
+    valkeyCache.delete("createChat");
+    valkeyCache.delete("createChat:ip:127.0.0.1");
+  }
 
   @Test
   void signUpReturnsCreatedWithAuthTokenHeader() throws Exception {
@@ -205,6 +216,37 @@ class ControllerTest extends AbstractRepositoryIntegrationTest {
 
     String chatId = response.get("chats").get(0).get("chatId").asText();
     assertThat(response.get("scores").has(chatId)).isTrue();
+  }
+
+  @Test
+  void createChatExceedingRateLimitReturns429WithRetryAfterHeader()
+      throws Exception {
+    valkeyCache.delete("createChat");
+    valkeyCache.delete("createChat:ip:127.0.0.1");
+
+    for (int i = 0; i < 30; i++) {
+      mockMvc.perform(
+          post("/chats").contentType(MediaType.APPLICATION_JSON).content("""
+              {"chatTitle":"Chat %d"}""".formatted(i)));
+    }
+
+    mockMvc
+        .perform(
+            post("/chats").contentType(MediaType.APPLICATION_JSON).content("""
+                {"chatTitle":"One too many"}"""))
+        .andExpect(status().isTooManyRequests())
+        .andExpect(header().string("Retry-After", "60"));
+  }
+
+  @Test
+  void requestExceedingMaxBodySizeReturns413() throws Exception {
+    String oversizedTitle = "x".repeat(300_000);
+
+    mockMvc
+        .perform(
+            post("/chats").contentType(MediaType.APPLICATION_JSON).content("""
+                {"chatTitle":"%s"}""".formatted(oversizedTitle)))
+        .andExpect(status().isPayloadTooLarge());
   }
 
   @Test

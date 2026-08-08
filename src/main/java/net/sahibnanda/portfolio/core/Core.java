@@ -2,16 +2,19 @@ package net.sahibnanda.portfolio.core;
 
 import lombok.extern.slf4j.Slf4j;
 import net.sahibnanda.portfolio.config.AuthProperties;
+import net.sahibnanda.portfolio.config.ChatLimitsProperties;
 import net.sahibnanda.portfolio.entity.Message;
 import net.sahibnanda.portfolio.exception.CacheSetException;
 import net.sahibnanda.portfolio.exception.ChatAccessDeniedException;
 import net.sahibnanda.portfolio.exception.ChatNotFoundException;
 import net.sahibnanda.portfolio.exception.CodeforcesCallException;
+import net.sahibnanda.portfolio.exception.ConversationTooLongException;
 import net.sahibnanda.portfolio.exception.DatabaseOperationException;
 import net.sahibnanda.portfolio.exception.DuplicateUsernameException;
 import net.sahibnanda.portfolio.exception.GitHubCallException;
 import net.sahibnanda.portfolio.exception.GroqCallException;
 import net.sahibnanda.portfolio.exception.HealthCheckException;
+import net.sahibnanda.portfolio.exception.InputTooLongException;
 import net.sahibnanda.portfolio.exception.InvalidCredentialsException;
 import net.sahibnanda.portfolio.exception.InvalidEmailException;
 import net.sahibnanda.portfolio.exception.InvalidPasswordException;
@@ -61,6 +64,7 @@ import net.sahibnanda.portfolio.services.RateLimitService;
 import net.sahibnanda.portfolio.services.SearchService;
 import net.sahibnanda.portfolio.services.UserChatService;
 import net.sahibnanda.portfolio.services.WorkerService;
+import net.sahibnanda.portfolio.utils.ConversationHistoryUtils;
 import net.sahibnanda.portfolio.utils.StringUtils;
 import net.sahibnanda.portfolio.utils.TokenUtils;
 import net.sahibnanda.portfolio.utils.ValidatorUtils;
@@ -164,6 +168,9 @@ public class Core {
   /** Fetches the portfolio owner's professional links. */
   private final DetailsService detailsService;
 
+  /** Caps on caller-supplied chat input sizes and per-turn LLM context. */
+  private final ChatLimitsProperties chatLimits;
+
   /**
    * How many requests are allowed for an API, and over what window.
    *
@@ -211,13 +218,16 @@ public class Core {
    * @param limitService enforces per-API and per-username rate limits
    * @param searcher searches the requesting user's chats
    * @param detailsFetcher fetches the portfolio owner's professional links
+   * @param chatLimitsConfig caps on caller-supplied chat input sizes and
+   *        per-turn LLM context
    */
   public Core(final UserChatService chatService,
       final AnonymousChatService anonymousChats,
       final OrchestratorService orchestrator, final WorkerService worker,
       final AuthProperties authConfig, final CronPingService pingService,
       final RateLimitService limitService, final SearchService searcher,
-      final DetailsService detailsFetcher) {
+      final DetailsService detailsFetcher,
+      final ChatLimitsProperties chatLimitsConfig) {
     this.userChatService =
         Objects.requireNonNull(chatService, "userChatService is null");
     this.anonymousChatService =
@@ -236,17 +246,26 @@ public class Core {
         Objects.requireNonNull(searcher, "searchService is null");
     this.detailsService =
         Objects.requireNonNull(detailsFetcher, "detailsService is null");
+    this.chatLimits =
+        Objects.requireNonNull(chatLimitsConfig, "chatLimits is null");
   }
 
   /**
-   * Enforces the configured rate limit for {@code api}, both globally and per
-   * {@code username}.
+   * Enforces the configured rate limit for {@code api}, globally, per
+   * {@code username}, and per {@code clientIp} -- the IP tier exists
+   * specifically so rotating {@code X-Session-Id}/usernames can't be used to
+   * dodge the per-caller budget, since IP is the hardest-to-forge signal
+   * available here.
    *
    * @param api the name of the operation being rate-limited
    * @param username the requesting user
-   * @throws RateLimitExceededException if either limit has been exceeded
+   * @param clientIp the requesting caller's IP address; the IP tier is
+   *        skipped if blank (e.g. a request built without going through
+   *        {@code Controller})
+   * @throws RateLimitExceededException if any tier's limit has been exceeded
    */
-  private void enforceRateLimit(final String api, final String username) {
+  private void enforceRateLimit(final String api, final String username,
+      final String clientIp) {
     RateLimitRule rule = RATE_LIMITS.get(api);
     if (rule == null) {
       return;
@@ -255,8 +274,11 @@ public class Core {
         rateLimitService.isAllowed(api, rule.maxAllowed(), rule.ttlSeconds());
     boolean userAllowed = rateLimitService.isAllowed(api + ":" + username,
         rule.maxAllowed(), rule.ttlSeconds());
-    if (!apiAllowed || !userAllowed) {
-      throw new RateLimitExceededException(api);
+    boolean ipAllowed = StringUtils.isEmpty(clientIp) || rateLimitService
+        .isAllowed(api + ":ip:" + clientIp, rule.maxAllowed(),
+            rule.ttlSeconds());
+    if (!apiAllowed || !userAllowed || !ipAllowed) {
+      throw new RateLimitExceededException(api, rule.ttlSeconds());
     }
   }
 
@@ -270,7 +292,8 @@ public class Core {
    */
   public ResponsePOJO signUp(final UserGateRequestPOJO request) {
     try {
-      enforceRateLimit(API_SIGN_UP, request.getUsername());
+      enforceRateLimit(API_SIGN_UP, request.getUsername(),
+          request.getIpAddress());
       ValidatorUtils.validatePassword(request.getPassword());
       UserObject user =
           userChatService.signUp(request.getUsername(), request.getPassword());
@@ -290,7 +313,8 @@ public class Core {
    */
   public ResponsePOJO login(final UserGateRequestPOJO request) {
     try {
-      enforceRateLimit(API_LOGIN, request.getUsername());
+      enforceRateLimit(API_LOGIN, request.getUsername(),
+          request.getIpAddress());
       UserObject user =
           userChatService.login(request.getUsername(), request.getPassword());
       return buildGateResponse(HttpStatus.OK, user);
@@ -316,7 +340,9 @@ public class Core {
     try {
       if (isAuthenticated(request)) {
         String username = extractUsername(request);
-        enforceRateLimit(API_CREATE_CHAT, username);
+        enforceRateLimit(API_CREATE_CHAT, username, request.getIpAddress());
+        ValidatorUtils.validateMaxLength(request.getChatTitle(), "chatTitle",
+            chatLimits.maxChatTitleLength());
         List<ChatObject> chatList =
             userChatService.createChat(username, request.getChatTitle());
         return ListOfChatResponsePOJO.builder()
@@ -324,7 +350,10 @@ public class Core {
             .chats(chatList).build();
       }
       String sessionId = extractSessionId(request);
-      enforceRateLimit(API_CREATE_CHAT, "anon:" + sessionId);
+      enforceRateLimit(API_CREATE_CHAT, "anon:" + sessionId,
+          request.getIpAddress());
+      ValidatorUtils.validateMaxLength(request.getChatTitle(), "chatTitle",
+          chatLimits.maxChatTitleLength());
       ChatObject chat =
           anonymousChatService.createChat(sessionId, request.getChatTitle());
       return ListOfChatResponsePOJO.builder().httpStatusCode(HttpStatus.CREATED)
@@ -345,7 +374,7 @@ public class Core {
   public ResponsePOJO allChats(final ChatRequestPOJO request) {
     try {
       String username = extractUsername(request);
-      enforceRateLimit(API_ALL_CHATS, username);
+      enforceRateLimit(API_ALL_CHATS, username, request.getIpAddress());
       List<ChatObject> chatList = userChatService.listChats(username);
       return ListOfChatResponsePOJO.builder().httpStatusCode(HttpStatus.OK)
           .timestamp(LocalDateTime.now()).chats(chatList).build();
@@ -368,13 +397,14 @@ public class Core {
     try {
       if (isAuthenticated(request)) {
         String username = extractUsername(request);
-        enforceRateLimit(API_GET_CHAT_BY_ID, username);
+        enforceRateLimit(API_GET_CHAT_BY_ID, username, request.getIpAddress());
         ChatObject chat =
             userChatService.getChatById(username, request.getChatId());
         return buildChatResponse(HttpStatus.OK, chat);
       }
       String sessionId = extractSessionId(request);
-      enforceRateLimit(API_GET_CHAT_BY_ID, "anon:" + sessionId);
+      enforceRateLimit(API_GET_CHAT_BY_ID, "anon:" + sessionId,
+          request.getIpAddress());
       ChatObject chat =
           anonymousChatService.getChatById(sessionId, request.getChatId());
       return buildChatResponse(HttpStatus.OK, chat);
@@ -393,7 +423,9 @@ public class Core {
   public ResponsePOJO updateTitle(final ChatRequestPOJO request) {
     try {
       String username = extractUsername(request);
-      enforceRateLimit(API_UPDATE_TITLE, username);
+      enforceRateLimit(API_UPDATE_TITLE, username, request.getIpAddress());
+      ValidatorUtils.validateMaxLength(request.getChatTitle(), "chatTitle",
+          chatLimits.maxChatTitleLength());
       List<ChatObject> chatList = userChatService.updateChatTitle(username,
           request.getChatId(), request.getChatTitle());
       ChatObject updatedChat = chatList.stream()
@@ -423,18 +455,26 @@ public class Core {
       String callerId =
           authenticated ? extractUsername(request) : extractSessionId(request);
       String rateLimitKey = authenticated ? callerId : "anon:" + callerId;
-      enforceRateLimit(API_USER_PROMPT, rateLimitKey);
+      enforceRateLimit(API_USER_PROMPT, rateLimitKey, request.getIpAddress());
+      ValidatorUtils.validateMaxLength(request.getMessage(), "message",
+          chatLimits.maxMessageLength());
 
       ChatObject existingChat = authenticated
           ? userChatService.getChatById(callerId, request.getChatId())
           : anonymousChatService.getChatById(callerId, request.getChatId());
       List<Message> history = existingChat.getMessages();
+      if (history.size() >= chatLimits.maxMessagesPerChat()) {
+        throw new ConversationTooLongException(request.getChatId(),
+            chatLimits.maxMessagesPerChat());
+      }
+      List<Message> boundedHistory = ConversationHistoryUtils.truncate(history,
+          chatLimits.maxHistoryMessages(), chatLimits.maxHistoryChars());
       OrchestratorResponse routing =
-          orchestratorService.route(history, request.getMessage());
+          orchestratorService.route(boundedHistory, request.getMessage());
       log.info("Orchestrator routed to {} ({})", routing.getRequiredContexts(),
           routing.getReason());
       String answer = workerService.respond(routing.getRequiredContexts(),
-          history, request.getMessage());
+          boundedHistory, request.getMessage());
 
       ChatObject updatedChat;
       if (authenticated) {
@@ -465,7 +505,9 @@ public class Core {
   public ResponsePOJO searchChat(final SearchRequestPOJO request) {
     try {
       String username = extractUsername(request);
-      enforceRateLimit(API_SEARCH_CHAT, username);
+      enforceRateLimit(API_SEARCH_CHAT, username, request.getIpAddress());
+      ValidatorUtils.validateMaxLength(request.getQuery(), "query",
+          chatLimits.maxSearchQueryLength());
       List<ChatSearchResult> results =
           searchService.processUserQuery(username, request.getQuery());
       Map<String, ChatObject> chatsById =
@@ -631,7 +673,7 @@ public class Core {
     }
     if (!rateLimitService.isAllowed(api, rule.maxAllowed(),
         rule.ttlSeconds())) {
-      throw new RateLimitExceededException(api);
+      throw new RateLimitExceededException(api, rule.ttlSeconds());
     }
   }
 
@@ -706,6 +748,10 @@ public class Core {
         knownError(HttpStatus.BAD_REQUEST, exception);
       case InvalidEmailException _ ->
         knownError(HttpStatus.BAD_REQUEST, exception);
+      case InputTooLongException _ ->
+        knownError(HttpStatus.BAD_REQUEST, exception);
+      case ConversationTooLongException _ ->
+        knownError(HttpStatus.BAD_REQUEST, exception);
       case IllegalArgumentException _ ->
         knownError(HttpStatus.BAD_REQUEST, exception);
       case DuplicateUsernameException _ ->
@@ -718,8 +764,13 @@ public class Core {
         knownError(HttpStatus.FORBIDDEN, exception);
       case InvalidCredentialsException _ ->
         knownError(HttpStatus.UNAUTHORIZED, exception);
-      case RateLimitExceededException _ ->
-        knownError(HttpStatus.TOO_MANY_REQUESTS, exception);
+      case RateLimitExceededException rle -> ErrorResponsePOJO.builder()
+        .httpStatusCode(HttpStatus.TOO_MANY_REQUESTS)
+        .timestamp(LocalDateTime.now()).showMessageAsIs(true)
+        .errorMessage(rle.getMessage())
+        .headers(
+            Map.of("Retry-After", String.valueOf(rle.getRetryAfterSeconds())))
+        .build();
       // Every non-Gate request must carry a valid X-Auth-Token; almost
       // always this means the header is missing/tampered/expired, not an
       // internal crypto failure, so it is safe to show and unauthorized.
