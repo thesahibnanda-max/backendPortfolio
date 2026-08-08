@@ -191,17 +191,6 @@ host automatically), e.g. `DB_HOST=host.docker.internal`,
 `KAFKA_BOOTSTRAP_SERVERS=host.docker.internal:9092`,
 `OPENSEARCH_HOST=host.docker.internal`.
 
-### Continuous deployment
-
-Every push to `master` (including a PR merge) runs
-[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml): it builds
-this Dockerfile, pushes the image to GHCR tagged with the commit SHA, then
-SSHes into the production host and runs
-[`deploy/deploy.sh`](deploy/deploy.sh), which does a health-checked
-blue-green swap between two containers behind a Caddy HTTPS reverse
-proxy -- the previous version keeps serving until the new one passes its
-own `/health` check, so a bad deploy never takes the site down.
-
 ## Running the tests
 
 ```bash
