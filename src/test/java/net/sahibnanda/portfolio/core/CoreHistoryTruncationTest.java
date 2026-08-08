@@ -56,12 +56,16 @@ class CoreHistoryTruncationTest extends AbstractRepositoryIntegrationTest {
   @MockitoBean
   private WorkerService workerService;
 
-  // createChat's global rate-limit key is shared with CoreTest/ControllerTest
-  // across the whole suite -- reset it so a saturating test elsewhere doesn't
-  // leak a spent budget in here.
+  // createChat's and userPrompt's global rate-limit keys are shared with
+  // CoreTest/ControllerTest across the whole suite -- reset them so a
+  // saturating test elsewhere (e.g. CoreTest's userPrompt rate-limit test,
+  // which deliberately exhausts the 5-req/60s global budget and leaves it
+  // spent) doesn't leak into this test, whose ordering relative to those
+  // isn't guaranteed.
   @BeforeEach
-  void resetCreateChatRateLimit() {
+  void resetRateLimits() {
     valkeyCache.delete("createChat");
+    valkeyCache.delete("userPrompt");
   }
 
   @Test
