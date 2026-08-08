@@ -18,10 +18,6 @@ FROM eclipse-temurin:25-jre AS runtime
 WORKDIR /app
 RUN useradd --system --create-home appuser
 COPY --from=build /build/target/*.jar app.jar
-# Optional: any CA cert(s) for Kafka's ssl.truststore.location. .dockerkeep
-# guarantees at least one match so the build doesn't fail when no .pem
-# exists (the common case -- *.pem is gitignored).
-COPY *.pem .dockerkeep ./
 USER appuser
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

@@ -149,6 +149,11 @@ mvn checkstyle:check        # verify style (Sun ruleset: 80-column lines,
 
 ### Docker
 
+The image itself is environment-agnostic -- nothing environment-specific
+(env vars, Kafka CA certs) is ever baked in at `docker build` time. Both
+are supplied purely at `docker run` time, so the same built image can be
+reused across every environment.
+
 ```bash
 docker build -t backend-portfolio .
 
@@ -160,6 +165,21 @@ docker run -p 8080:8080 --env-file .env backend-portfolio
 # e.g. for a staging deploy:
 docker run -p 8080:8080 --env-file stage.env backend-portfolio
 ```
+
+If an environment's `KAFKA_SSL_TRUSTSTORE_LOCATION` is set (see the env
+var table above), mount that CA cert file in at the same relative path --
+it's read relative to the container's `WORKDIR` (`/app`), so mounting it
+to `/app/<same filename>` just works with no other change, e.g.:
+
+```bash
+docker run -p 8080:8080 --env-file stage.env \
+  -v "$(pwd)/stage_kafka_ca.pem:/app/stage_kafka_ca.pem:ro" \
+  backend-portfolio
+```
+
+The container runs as a non-root user (`appuser`), so on Linux hosts the
+mounted `.pem` needs to be host-readable (e.g. `chmod 644`) -- not an
+issue under Docker Desktop.
 
 If you're pointing the container at the infra containers from
 ["Running the required infrastructure"](#running-the-required-infrastructure)
