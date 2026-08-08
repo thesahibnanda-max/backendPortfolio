@@ -270,6 +270,10 @@
                                     <name>JSONB</name>
                                     <includeExpression>chats\.messages</includeExpression>
                                 </forcedType>
+                                <forcedType>
+                                    <name>JSONB</name>
+                                    <includeExpression>anonymous_chats\.messages</includeExpression>
+                                </forcedType>
                             </forcedTypes>
                         </database>
                         <target>

@@ -234,11 +234,31 @@ class CoreTest extends AbstractRepositoryIntegrationTest {
   }
 
   @Test
-  void createChatWithoutAuthTokenReturnsUnauthorizedError() {
+  void createChatWithoutAuthTokenCreatesAnonymousChat() {
+    // Real requests always go through Controller, which resolves and sets
+    // sessionId before calling Core -- simulate that here since this test
+    // calls Core directly.
+    ResponsePOJO response = core.createChat(ChatRequestPOJO.builder()
+        .chatTitle("My Chat").sessionId(StringUtils.generateUlid()).build());
+
+    assertThat(response.getHttpStatusCode()).isEqualTo(HttpStatus.CREATED);
+    ListOfChatResponsePOJO list = (ListOfChatResponsePOJO) response;
+    assertThat(list.getChats()).hasSize(1);
+    assertThat(list.getChats().get(0).getChatTitle()).isEqualTo("My Chat");
+    assertThat(list.getChats().get(0).getUsername()).isNull();
+  }
+
+  @Test
+  void createChatWithoutAuthTokenOrSessionIdReturnsInternalServerError() {
+    // Guards the SessionResolutionException fallback for a request that
+    // somehow reached Core with neither an auth token nor a resolved
+    // session id -- should never happen once Controller always resolves
+    // one, but Core must still fail safely rather than crash unhandled.
     ResponsePOJO response =
         core.createChat(ChatRequestPOJO.builder().chatTitle("My Chat").build());
 
-    assertThat(response.getHttpStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    assertThat(response.getHttpStatusCode())
+        .isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
   }
 
   @Test

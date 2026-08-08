@@ -32,4 +32,12 @@ public class RequestPOJO {
   @Builder.Default
   @JsonIgnore
   private final Map<String, String> headers = Map.of();
+
+  /**
+   * The anonymous-visitor session id resolved by the middleware package from
+   * the request's {@code X-Session-Id} header. Never supplied by the client's
+   * JSON body.
+   */
+  @JsonIgnore
+  private final String sessionId;
 }
