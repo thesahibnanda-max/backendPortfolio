@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 @AutoConfigureMockMvc
 class ControllerTest extends AbstractRepositoryIntegrationTest {
@@ -52,11 +53,73 @@ class ControllerTest extends AbstractRepositoryIntegrationTest {
   }
 
   @Test
-  void createChatWithoutAuthTokenReturnsUnauthorized() throws Exception {
+  void createChatWithoutAuthTokenCreatesAnonymousChatAndSetsSessionIdHeader()
+      throws Exception {
     mockMvc
         .perform(
             post("/chats").contentType(MediaType.APPLICATION_JSON).content("""
                 {"chatTitle":"My Chat"}"""))
+        .andExpect(status().isCreated())
+        .andExpect(header().exists("X-Session-Id"))
+        .andExpect(jsonPath("$.chats", hasSize(1)))
+        .andExpect(jsonPath("$.chats[0].chatTitle").value("My Chat"));
+  }
+
+  @Test
+  void firstRequestWithNoSessionIdHeaderSetsOneOnTheResponse()
+      throws Exception {
+    mockMvc.perform(get("/health")).andExpect(status().isOk())
+        .andExpect(header().exists("X-Session-Id"));
+  }
+
+  @Test
+  void anonymousSessionIdHeaderPersistsAcrossFollowUpRequests()
+      throws Exception {
+    MvcResult createResult = mockMvc
+        .perform(
+            post("/chats").contentType(MediaType.APPLICATION_JSON).content("""
+                {"chatTitle":"Anon Chat"}"""))
+        .andExpect(status().isCreated()).andReturn();
+    String sessionId = createResult.getResponse().getHeader("X-Session-Id");
+    String chatId = new ObjectMapper()
+        .readTree(createResult.getResponse().getContentAsString()).get("chats")
+        .get(0).get("chatId").asText();
+
+    // Replaying the same session id reaches the same anonymous chat.
+    mockMvc.perform(get("/chats/" + chatId).header("X-Session-Id", sessionId))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.chat.chatTitle").value("Anon Chat"));
+
+    // No session id header at all means a brand-new session, which doesn't
+    // own the chat -- ChatAccessDeniedException maps to 403, not 401 or
+    // 404, since the chat does exist.
+    mockMvc.perform(get("/chats/" + chatId)).andExpect(status().isForbidden());
+  }
+
+  @Test
+  void anonymousSessionIdHeaderDoesNotUnlockAuthenticatedOnlyEndpoints()
+      throws Exception {
+    MvcResult createResult = mockMvc
+        .perform(
+            post("/chats").contentType(MediaType.APPLICATION_JSON).content("""
+                {"chatTitle":"Anon Chat"}"""))
+        .andExpect(status().isCreated()).andReturn();
+    String sessionId = createResult.getResponse().getHeader("X-Session-Id");
+    String chatId = new ObjectMapper()
+        .readTree(createResult.getResponse().getContentAsString()).get("chats")
+        .get(0).get("chatId").asText();
+
+    mockMvc.perform(get("/chats").header("X-Session-Id", sessionId))
+        .andExpect(status().isUnauthorized());
+
+    mockMvc.perform(post("/chats/search").header("X-Session-Id", sessionId)
+        .contentType(MediaType.APPLICATION_JSON).content("""
+            {"query":"anything"}""")).andExpect(status().isUnauthorized());
+
+    mockMvc
+        .perform(patch("/chats/" + chatId).header("X-Session-Id", sessionId)
+            .contentType(MediaType.APPLICATION_JSON).content("""
+                {"chatTitle":"Renamed"}"""))
         .andExpect(status().isUnauthorized());
   }
 

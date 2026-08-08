@@ -18,13 +18,18 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * so this keeps working unchanged if credentialed requests are ever introduced
  * later -- Spring rejects the literal-{@code *} form outright once
  * {@code allowCredentials(true)} is set, while the pattern form does not.
+ * Nothing here relies on cookies today: the anonymous-session id (see the
+ * {@code middleware} package) travels as a plain {@code X-Session-Id} header,
+ * the same way {@code X-Auth-Token} already does, specifically so it isn't
+ * subject to third-party-cookie blocking (Safari ITP, strict-mode Firefox) now
+ * that the frontend and this API live on different registrable domains.
  *
  * <p>
  * {@code exposedHeaders("*")} is the fix for the bug that motivated this class:
- * {@code X-Auth-Token} is a non-safelisted response header, invisible to
- * browser JS unless explicitly exposed, even under an otherwise fully open
- * policy -- an open {@code allowedHeaders} only covers what the browser may
- * send, not what JS may read back.
+ * {@code X-Auth-Token} (and now {@code X-Session-Id}) are non-safelisted
+ * response headers, invisible to browser JS unless explicitly exposed, even
+ * under an otherwise fully open policy -- an open {@code allowedHeaders} only
+ * covers what the browser may send, not what JS may read back.
  */
 @Configuration(proxyBeanMethods = false)
 public final class CorsConfig implements WebMvcConfigurer {

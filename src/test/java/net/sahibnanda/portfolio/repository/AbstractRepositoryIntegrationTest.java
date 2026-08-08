@@ -118,6 +118,7 @@ public abstract class AbstractRepositoryIntegrationTest {
   @AfterEach
   void cleanDatabase() {
     dslContext.deleteFrom(Tables.CHATS).execute();
+    dslContext.deleteFrom(Tables.ANONYMOUS_CHATS).execute();
     dslContext.deleteFrom(Tables.USERS).execute();
   }
 

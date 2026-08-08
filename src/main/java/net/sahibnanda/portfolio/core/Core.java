@@ -23,6 +23,7 @@ import net.sahibnanda.portfolio.exception.OpenSearchOperationException;
 import net.sahibnanda.portfolio.exception.ProfileCallException;
 import net.sahibnanda.portfolio.exception.RateLimitExceededException;
 import net.sahibnanda.portfolio.exception.RepositoryException;
+import net.sahibnanda.portfolio.exception.SessionResolutionException;
 import net.sahibnanda.portfolio.exception.TokenException;
 import net.sahibnanda.portfolio.exception.UserNotFoundException;
 import net.sahibnanda.portfolio.exception.ValkeyCacheException;
@@ -52,6 +53,7 @@ import net.sahibnanda.portfolio.pojo.SearchRequestPOJO;
 import net.sahibnanda.portfolio.pojo.SearchResponsePOJO;
 import net.sahibnanda.portfolio.pojo.UserGateRequestPOJO;
 import net.sahibnanda.portfolio.pojo.UserGateResponsePOJO;
+import net.sahibnanda.portfolio.services.AnonymousChatService;
 import net.sahibnanda.portfolio.services.CronPingService;
 import net.sahibnanda.portfolio.services.DetailsService;
 import net.sahibnanda.portfolio.services.OrchestratorService;
@@ -138,6 +140,9 @@ public class Core {
   /** Handles user sign-up and login against the users table. */
   private final UserChatService userChatService;
 
+  /** Handles ephemeral, session-scoped chats for anonymous visitors. */
+  private final AnonymousChatService anonymousChatService;
+
   /** Routes chat requests to the appropriate worker. */
   private final OrchestratorService orchestratorService;
 
@@ -196,6 +201,8 @@ public class Core {
    * services together.
    *
    * @param chatService handles user sign-up and login
+   * @param anonymousChats handles ephemeral, session-scoped chats for anonymous
+   *        visitors
    * @param orchestrator routes chat requests to the appropriate worker
    * @param worker executes chat requests against the configured LLM
    * @param authConfig configuration for encrypting/decrypting auth tokens
@@ -206,12 +213,15 @@ public class Core {
    * @param detailsFetcher fetches the portfolio owner's professional links
    */
   public Core(final UserChatService chatService,
+      final AnonymousChatService anonymousChats,
       final OrchestratorService orchestrator, final WorkerService worker,
       final AuthProperties authConfig, final CronPingService pingService,
       final RateLimitService limitService, final SearchService searcher,
       final DetailsService detailsFetcher) {
     this.userChatService =
         Objects.requireNonNull(chatService, "userChatService is null");
+    this.anonymousChatService =
+        Objects.requireNonNull(anonymousChats, "anonymousChatService is null");
     this.orchestratorService =
         Objects.requireNonNull(orchestrator, "orchestratorService is null");
     this.workerService =
@@ -290,21 +300,35 @@ public class Core {
   }
 
   /**
-   * Creates a new chat for the requesting user.
+   * Creates a new chat for the requesting caller. Authenticated callers
+   * (carrying a valid {@code X-Auth-Token}) get a durable, username-owned chat;
+   * anonymous callers get an ephemeral, session-id-owned chat instead.
    *
-   * @param request the auth-token header and title for the new chat
-   * @return a {@link ListOfChatResponsePOJO} with every chat owned by the user,
-   *         newest first, including the one just created, or an
-   *         {@link ErrorResponsePOJO} describing the failure
+   * @param request the auth-token header and/or resolved session id, and the
+   *        title for the new chat
+   * @return for an authenticated caller, a {@link ListOfChatResponsePOJO} with
+   *         every chat owned by the user, newest first, including the one just
+   *         created; for an anonymous caller, the same envelope wrapping just
+   *         the newly created chat; or an {@link ErrorResponsePOJO} describing
+   *         the failure
    */
   public ResponsePOJO createChat(final ChatRequestPOJO request) {
     try {
-      String username = extractUsername(request);
-      enforceRateLimit(API_CREATE_CHAT, username);
-      List<ChatObject> chatList =
-          userChatService.createChat(username, request.getChatTitle());
+      if (isAuthenticated(request)) {
+        String username = extractUsername(request);
+        enforceRateLimit(API_CREATE_CHAT, username);
+        List<ChatObject> chatList =
+            userChatService.createChat(username, request.getChatTitle());
+        return ListOfChatResponsePOJO.builder()
+            .httpStatusCode(HttpStatus.CREATED).timestamp(LocalDateTime.now())
+            .chats(chatList).build();
+      }
+      String sessionId = extractSessionId(request);
+      enforceRateLimit(API_CREATE_CHAT, "anon:" + sessionId);
+      ChatObject chat =
+          anonymousChatService.createChat(sessionId, request.getChatTitle());
       return ListOfChatResponsePOJO.builder().httpStatusCode(HttpStatus.CREATED)
-          .timestamp(LocalDateTime.now()).chats(chatList).build();
+          .timestamp(LocalDateTime.now()).chats(List.of(chat)).build();
     } catch (Exception e) {
       return buildErrorResponse(e);
     }
@@ -331,18 +355,28 @@ public class Core {
   }
 
   /**
-   * Fetches a single chat owned by the requesting user.
+   * Fetches a single chat owned by the requesting caller. Authenticated callers
+   * are scoped to their username; anonymous callers are scoped to their
+   * resolved session id.
    *
-   * @param request the auth-token header and chat identifier to fetch
+   * @param request the auth-token header and/or resolved session id, and the
+   *        chat identifier to fetch
    * @return a {@link ChatResponsePOJO} with the requested chat, or an
    *         {@link ErrorResponsePOJO} describing the failure
    */
   public ResponsePOJO getChatById(final ChatRequestPOJO request) {
     try {
-      String username = extractUsername(request);
-      enforceRateLimit(API_GET_CHAT_BY_ID, username);
+      if (isAuthenticated(request)) {
+        String username = extractUsername(request);
+        enforceRateLimit(API_GET_CHAT_BY_ID, username);
+        ChatObject chat =
+            userChatService.getChatById(username, request.getChatId());
+        return buildChatResponse(HttpStatus.OK, chat);
+      }
+      String sessionId = extractSessionId(request);
+      enforceRateLimit(API_GET_CHAT_BY_ID, "anon:" + sessionId);
       ChatObject chat =
-          userChatService.getChatById(username, request.getChatId());
+          anonymousChatService.getChatById(sessionId, request.getChatId());
       return buildChatResponse(HttpStatus.OK, chat);
     } catch (Exception e) {
       return buildErrorResponse(e);
@@ -373,19 +407,27 @@ public class Core {
   }
 
   /**
-   * Answers the user's latest message in a chat, persisting both the user's
-   * message and the generated reply.
+   * Answers the caller's latest message in a chat, persisting both the user's
+   * message and the generated reply. Authenticated callers are scoped to their
+   * username; anonymous callers are scoped to their resolved session id -- the
+   * Orchestrator/Worker pipeline itself is identical either way.
    *
-   * @param request the auth-token header, chat identifier, and message to send
+   * @param request the auth-token header and/or resolved session id, the chat
+   *        identifier, and the message to send
    * @return a {@link ChatResponsePOJO} with the chat, including the new reply,
    *         or an {@link ErrorResponsePOJO} describing the failure
    */
   public ResponsePOJO userPrompt(final ChatRequestPOJO request) {
     try {
-      String username = extractUsername(request);
-      enforceRateLimit(API_USER_PROMPT, username);
-      ChatObject existingChat =
-          userChatService.getChatById(username, request.getChatId());
+      boolean authenticated = isAuthenticated(request);
+      String callerId =
+          authenticated ? extractUsername(request) : extractSessionId(request);
+      String rateLimitKey = authenticated ? callerId : "anon:" + callerId;
+      enforceRateLimit(API_USER_PROMPT, rateLimitKey);
+
+      ChatObject existingChat = authenticated
+          ? userChatService.getChatById(callerId, request.getChatId())
+          : anonymousChatService.getChatById(callerId, request.getChatId());
       List<Message> history = existingChat.getMessages();
       OrchestratorResponse routing =
           orchestratorService.route(history, request.getMessage());
@@ -393,10 +435,19 @@ public class Core {
           routing.getReason());
       String answer = workerService.respond(routing.getRequiredContexts(),
           history, request.getMessage());
-      userChatService.saveUserMessage(username, request.getChatId(),
-          request.getMessage());
-      ChatObject updatedChat = userChatService.saveAssistantMessage(username,
-          request.getChatId(), answer);
+
+      ChatObject updatedChat;
+      if (authenticated) {
+        userChatService.saveUserMessage(callerId, request.getChatId(),
+            request.getMessage());
+        updatedChat = userChatService.saveAssistantMessage(callerId,
+            request.getChatId(), answer);
+      } else {
+        anonymousChatService.saveUserMessage(callerId, request.getChatId(),
+            request.getMessage());
+        updatedChat = anonymousChatService.saveAssistantMessage(callerId,
+            request.getChatId(), answer);
+      }
       return buildChatResponse(HttpStatus.OK, updatedChat);
     } catch (Exception e) {
       return buildErrorResponse(e);
@@ -601,6 +652,38 @@ public class Core {
     return TokenUtils.decrypt(token, authProperties.secretKey());
   }
 
+  /**
+   * Whether the request carries a usable {@code X-Auth-Token} header, i.e.
+   * whether it should be handled by the authenticated (username-scoped) path
+   * rather than the anonymous (session-scoped) one.
+   *
+   * @param request the request to check
+   * @return true if the request carries a non-blank {@code X-Auth-Token}
+   */
+  private boolean isAuthenticated(final RequestPOJO request) {
+    return !StringUtils.isEmpty(request.getHeaders().get(X_AUTH_TOKEN));
+  }
+
+  /**
+   * Recovers the anonymous session id resolved by the middleware package's
+   * {@code SessionHeaderResolver} and threaded onto the request by
+   * {@code Controller}.
+   *
+   * @param request the request to read the session id from
+   * @return the resolved session id
+   * @throws SessionResolutionException if no session id was resolved -- should
+   *         never happen when the request went through {@code Controller}, so
+   *         this signals a server-side invariant violation
+   */
+  private String extractSessionId(final RequestPOJO request) {
+    String sessionId = request.getSessionId();
+    if (StringUtils.isEmpty(sessionId)) {
+      throw new SessionResolutionException(
+          "No session id was resolved for this request.");
+    }
+    return sessionId;
+  }
+
   private UserGateResponsePOJO buildGateResponse(final HttpStatus status,
       final UserObject user) {
     String authToken =
@@ -643,6 +726,9 @@ public class Core {
       case TokenException _ -> knownError(HttpStatus.UNAUTHORIZED, exception);
 
       // Internal failures: known cause, message not safe to expose.
+      // Signals Controller failed to resolve a session id before calling
+      // Core -- a server-side invariant violation, not a client mistake.
+      case SessionResolutionException _ -> genericError();
       case DatabaseOperationException _ -> genericError();
       case ValkeyCacheException _ -> genericError();
       case KafkaOperationException _ -> genericError();
