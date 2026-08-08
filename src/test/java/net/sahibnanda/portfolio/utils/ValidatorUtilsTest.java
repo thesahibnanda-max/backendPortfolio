@@ -87,9 +87,8 @@ class ValidatorUtilsTest {
   void validateMaxLengthRejectsValueOverLimit() {
     assertThatThrownBy(
         () -> ValidatorUtils.validateMaxLength("12345678901", "field", 10))
-        .isInstanceOf(InputTooLongException.class)
-        .hasMessageContaining("field").hasMessageContaining("10")
-        .hasMessageContaining("11");
+        .isInstanceOf(InputTooLongException.class).hasMessageContaining("field")
+        .hasMessageContaining("10").hasMessageContaining("11");
   }
 
   @Test

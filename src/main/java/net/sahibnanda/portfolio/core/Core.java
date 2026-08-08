@@ -259,8 +259,8 @@ public class Core {
    *
    * @param api the name of the operation being rate-limited
    * @param username the requesting user
-   * @param clientIp the requesting caller's IP address; the IP tier is
-   *        skipped if blank (e.g. a request built without going through
+   * @param clientIp the requesting caller's IP address; the IP tier is skipped
+   *        if blank (e.g. a request built without going through
    *        {@code Controller})
    * @throws RateLimitExceededException if any tier's limit has been exceeded
    */
@@ -274,9 +274,9 @@ public class Core {
         rateLimitService.isAllowed(api, rule.maxAllowed(), rule.ttlSeconds());
     boolean userAllowed = rateLimitService.isAllowed(api + ":" + username,
         rule.maxAllowed(), rule.ttlSeconds());
-    boolean ipAllowed = StringUtils.isEmpty(clientIp) || rateLimitService
-        .isAllowed(api + ":ip:" + clientIp, rule.maxAllowed(),
-            rule.ttlSeconds());
+    boolean ipAllowed =
+        StringUtils.isEmpty(clientIp) || rateLimitService.isAllowed(
+            api + ":ip:" + clientIp, rule.maxAllowed(), rule.ttlSeconds());
     if (!apiAllowed || !userAllowed || !ipAllowed) {
       throw new RateLimitExceededException(api, rule.ttlSeconds());
     }
@@ -765,12 +765,12 @@ public class Core {
       case InvalidCredentialsException _ ->
         knownError(HttpStatus.UNAUTHORIZED, exception);
       case RateLimitExceededException rle -> ErrorResponsePOJO.builder()
-        .httpStatusCode(HttpStatus.TOO_MANY_REQUESTS)
-        .timestamp(LocalDateTime.now()).showMessageAsIs(true)
-        .errorMessage(rle.getMessage())
-        .headers(
-            Map.of("Retry-After", String.valueOf(rle.getRetryAfterSeconds())))
-        .build();
+          .httpStatusCode(HttpStatus.TOO_MANY_REQUESTS)
+          .timestamp(LocalDateTime.now()).showMessageAsIs(true)
+          .errorMessage(rle.getMessage())
+          .headers(
+              Map.of("Retry-After", String.valueOf(rle.getRetryAfterSeconds())))
+          .build();
       // Every non-Gate request must carry a valid X-Auth-Token; almost
       // always this means the header is missing/tampered/expired, not an
       // internal crypto failure, so it is safe to show and unauthorized.

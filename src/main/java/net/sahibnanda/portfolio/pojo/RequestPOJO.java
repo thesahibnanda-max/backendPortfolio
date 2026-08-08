@@ -44,9 +44,9 @@ public class RequestPOJO {
   /**
    * The caller's IP address, resolved by the middleware package's {@code
    * ClientIpResolver} from Caddy's trusted {@code X-Forwarded-For} header.
-   * Never supplied by the client's JSON body. Used only as an additional
-   * strict rate-limit dimension in {@code Core} -- unlike {@code sessionId},
-   * it is not used for authorization/ownership.
+   * Never supplied by the client's JSON body. Used only as an additional strict
+   * rate-limit dimension in {@code Core} -- unlike {@code sessionId}, it is not
+   * used for authorization/ownership.
    */
   @JsonIgnore
   private final String ipAddress;

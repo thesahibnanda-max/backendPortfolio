@@ -486,9 +486,8 @@ class CoreTest extends AbstractRepositoryIntegrationTest {
     String token = signUpAndGetToken("oliver");
     String tooLongTitle = "x".repeat(chatLimits.maxChatTitleLength() + 1);
 
-    ResponsePOJO response = core.createChat(
-        ChatRequestPOJO.builder().headers(Map.of(AUTH_HEADER, token))
-            .chatTitle(tooLongTitle).build());
+    ResponsePOJO response = core.createChat(ChatRequestPOJO.builder()
+        .headers(Map.of(AUTH_HEADER, token)).chatTitle(tooLongTitle).build());
 
     assertThat(response.getHttpStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     assertThat(((ErrorResponsePOJO) response).getShowMessageAsIs()).isTrue();
@@ -569,9 +568,9 @@ class CoreTest extends AbstractRepositoryIntegrationTest {
     // budget is exhausted -- proves rotation alone isn't a free pass.
     ResponsePOJO response = null;
     for (int i = 0; i < 31; i++) {
-      response = core.createChat(ChatRequestPOJO.builder()
-          .chatTitle("Chat " + i).sessionId(StringUtils.generateUlid())
-          .ipAddress(sameIp).build());
+      response =
+          core.createChat(ChatRequestPOJO.builder().chatTitle("Chat " + i)
+              .sessionId(StringUtils.generateUlid()).ipAddress(sameIp).build());
     }
 
     assertThat(response.getHttpStatusCode())
@@ -590,9 +589,9 @@ class CoreTest extends AbstractRepositoryIntegrationTest {
       valkeyCache.incrementWithExpire("createChat:ip:" + ip, 60);
     }
 
-    ResponsePOJO response = core.createChat(ChatRequestPOJO.builder()
-        .chatTitle("Chat").sessionId(StringUtils.generateUlid()).ipAddress(ip)
-        .build());
+    ResponsePOJO response =
+        core.createChat(ChatRequestPOJO.builder().chatTitle("Chat")
+            .sessionId(StringUtils.generateUlid()).ipAddress(ip).build());
 
     assertThat(response.getHttpStatusCode())
         .isEqualTo(HttpStatus.TOO_MANY_REQUESTS);

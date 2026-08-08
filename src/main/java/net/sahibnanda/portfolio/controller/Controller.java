@@ -41,8 +41,8 @@ public class Controller {
   private final SessionHeaderResolver sessionHeaderResolver;
 
   /**
-   * Resolves the caller's IP address for every request -- the middleware
-   * layer sitting between this controller and {@link Core}.
+   * Resolves the caller's IP address for every request -- the middleware layer
+   * sitting between this controller and {@link Core}.
    */
   private final ClientIpResolver clientIpResolver;
 

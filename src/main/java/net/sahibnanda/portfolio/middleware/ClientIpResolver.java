@@ -5,14 +5,13 @@ import net.sahibnanda.portfolio.utils.StringUtils;
 import org.springframework.stereotype.Component;
 
 /**
- * Resolves the caller's IP address from the {@code X-Forwarded-For} header
- * set by the Caddy reverse proxy this application runs behind in production.
- * Caddy always sets/overwrites this header itself before forwarding to
- * 127.0.0.1:8081 -&gt; the container's 8080, so it cannot be spoofed by a
- * client as long as Caddy sits in front of every request. If this app is
- * ever exposed directly without Caddy (or an equivalent trusted proxy) in
- * front, this becomes a trivial spoofing vector and this resolver must be
- * revisited.
+ * Resolves the caller's IP address from the {@code X-Forwarded-For} header set
+ * by the Caddy reverse proxy this application runs behind in production. Caddy
+ * always sets/overwrites this header itself before forwarding to 127.0.0.1:8081
+ * -&gt; the container's 8080, so it cannot be spoofed by a client as long as
+ * Caddy sits in front of every request. If this app is ever exposed directly
+ * without Caddy (or an equivalent trusted proxy) in front, this becomes a
+ * trivial spoofing vector and this resolver must be revisited.
  */
 @Component
 public final class ClientIpResolver {

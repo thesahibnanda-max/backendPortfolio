@@ -15,12 +15,11 @@ import net.sahibnanda.portfolio.entity.Message;
 public final class ConversationHistoryUtils {
 
   /**
-   * Keeps at most the last {@code maxMessages} messages (oldest dropped
-   * first), then, if their combined character length still exceeds
-   * {@code maxChars}, drops further from the oldest end until it fits --
-   * except the single most recent message is always kept even if it alone
-   * exceeds {@code maxChars}, so the result is never empty when the input
-   * isn't.
+   * Keeps at most the last {@code maxMessages} messages (oldest dropped first),
+   * then, if their combined character length still exceeds {@code maxChars},
+   * drops further from the oldest end until it fits -- except the single most
+   * recent message is always kept even if it alone exceeds {@code maxChars}, so
+   * the result is never empty when the input isn't.
    *
    * @param history full stored history, oldest first
    * @param maxMessages maximum number of messages to keep

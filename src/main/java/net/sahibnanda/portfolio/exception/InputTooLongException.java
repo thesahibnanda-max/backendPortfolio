@@ -1,6 +1,9 @@
 package net.sahibnanda.portfolio.exception;
 
-/** Thrown when a caller-supplied text field exceeds its configured maximum length. */
+/**
+ * Thrown when a caller-supplied text field exceeds its configured maximum
+ * length.
+ */
 public final class InputTooLongException extends RuntimeException {
 
   /**

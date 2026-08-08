@@ -28,10 +28,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
- * Verifies {@link Core#userPrompt} bounds the conversation history sent to
- * the Orchestrator/Worker AIs even when a chat's persisted history is larger
- * than the configured cap -- {@link OrchestratorService}/{@link WorkerService}
- * are mocked here (instead of relying on the manual-only, real-LLM tests in
+ * Verifies {@link Core#userPrompt} bounds the conversation history sent to the
+ * Orchestrator/Worker AIs even when a chat's persisted history is larger than
+ * the configured cap -- {@link OrchestratorService}/{@link WorkerService} are
+ * mocked here (instead of relying on the manual-only, real-LLM tests in
  * {@link CoreTest}) so this stays covered by the ordinary test run.
  */
 class CoreHistoryTruncationTest extends AbstractRepositoryIntegrationTest {
@@ -66,17 +66,16 @@ class CoreHistoryTruncationTest extends AbstractRepositoryIntegrationTest {
 
   @Test
   void userPromptSendsOnlyBoundedHistoryToOrchestratorAndWorker() {
-    when(orchestratorService.route(anyList(), anyString())).thenReturn(
-        OrchestratorResponse.builder().requiredContexts(List.of())
+    when(orchestratorService.route(anyList(), anyString()))
+        .thenReturn(OrchestratorResponse.builder().requiredContexts(List.of())
             .reason("none needed").build());
     when(workerService.respond(any(), anyList(), anyString()))
         .thenReturn("canned answer");
 
     String token = signUpAndGetToken("tara");
-    ListOfChatResponsePOJO created =
-        (ListOfChatResponsePOJO) core.createChat(ChatRequestPOJO.builder()
-            .headers(Map.of(AUTH_HEADER, token)).chatTitle("Long Chat")
-            .build());
+    ListOfChatResponsePOJO created = (ListOfChatResponsePOJO) core.createChat(
+        ChatRequestPOJO.builder().headers(Map.of(AUTH_HEADER, token))
+            .chatTitle("Long Chat").build());
     String chatId = created.getChats().get(0).getChatId();
 
     // Seed well more messages than maxHistoryMessages, each right at the
@@ -96,12 +95,12 @@ class CoreHistoryTruncationTest extends AbstractRepositoryIntegrationTest {
 
     ArgumentCaptor<List<Message>> historyCaptor =
         ArgumentCaptor.forClass(List.class);
-    org.mockito.Mockito.verify(orchestratorService).route(
-        historyCaptor.capture(), anyString());
+    org.mockito.Mockito.verify(orchestratorService)
+        .route(historyCaptor.capture(), anyString());
     List<Message> sentHistory = historyCaptor.getValue();
 
-    assertThat(sentHistory.size()).isLessThanOrEqualTo(
-        chatLimits.maxHistoryMessages());
+    assertThat(sentHistory.size())
+        .isLessThanOrEqualTo(chatLimits.maxHistoryMessages());
     int totalChars =
         sentHistory.stream().mapToInt(m -> m.message().length()).sum();
     assertThat(totalChars).isLessThanOrEqualTo(chatLimits.maxHistoryChars());
