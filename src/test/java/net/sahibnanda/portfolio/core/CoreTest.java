@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import net.sahibnanda.portfolio.cache.ValkeyCache;
 import net.sahibnanda.portfolio.config.AuthProperties;
+import net.sahibnanda.portfolio.config.ChatLimitsProperties;
 import net.sahibnanda.portfolio.pojo.ChatRequestPOJO;
 import net.sahibnanda.portfolio.pojo.ChatResponsePOJO;
 import net.sahibnanda.portfolio.pojo.CodeforcesDetailsResponsePOJO;
@@ -19,8 +20,10 @@ import net.sahibnanda.portfolio.pojo.SearchRequestPOJO;
 import net.sahibnanda.portfolio.pojo.SearchResponsePOJO;
 import net.sahibnanda.portfolio.pojo.UserGateRequestPOJO;
 import net.sahibnanda.portfolio.repository.AbstractRepositoryIntegrationTest;
+import net.sahibnanda.portfolio.services.UserChatService;
 import net.sahibnanda.portfolio.utils.StringUtils;
 import net.sahibnanda.portfolio.utils.TokenUtils;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +43,21 @@ class CoreTest extends AbstractRepositoryIntegrationTest {
 
   @Autowired
   private ValkeyCache valkeyCache;
+
+  // createChat's global rate-limit key is now deliberately saturated by a
+  // few tests below (the IP-tier regression tests) -- reset it before every
+  // test so those don't leak a spent budget into whichever test happens to
+  // run next in the same 60s window.
+  @BeforeEach
+  void resetCreateChatRateLimit() {
+    valkeyCache.delete("createChat");
+  }
+
+  @Autowired
+  private ChatLimitsProperties chatLimits;
+
+  @Autowired
+  private UserChatService userChatService;
 
   @Test
   void signUpCreatesUserAndReturnsDecryptableToken() {
@@ -461,6 +479,140 @@ class CoreTest extends AbstractRepositoryIntegrationTest {
 
     assertThat(response.getHttpStatusCode())
         .isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+  }
+
+  @Test
+  void createChatWithTooLongTitleReturnsBadRequestError() {
+    String token = signUpAndGetToken("oliver");
+    String tooLongTitle = "x".repeat(chatLimits.maxChatTitleLength() + 1);
+
+    ResponsePOJO response = core.createChat(ChatRequestPOJO.builder()
+        .headers(Map.of(AUTH_HEADER, token)).chatTitle(tooLongTitle).build());
+
+    assertThat(response.getHttpStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(((ErrorResponsePOJO) response).getShowMessageAsIs()).isTrue();
+  }
+
+  @Test
+  void updateTitleWithTooLongTitleReturnsBadRequestError() {
+    String token = signUpAndGetToken("penny");
+    ListOfChatResponsePOJO created =
+        (ListOfChatResponsePOJO) createChat(token, "Original");
+    String chatId = created.getChats().get(0).getChatId();
+    String tooLongTitle = "x".repeat(chatLimits.maxChatTitleLength() + 1);
+
+    ResponsePOJO response = core.updateTitle(
+        ChatRequestPOJO.builder().headers(Map.of(AUTH_HEADER, token))
+            .chatId(chatId).chatTitle(tooLongTitle).build());
+
+    assertThat(response.getHttpStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+  }
+
+  @Test
+  void userPromptWithTooLongMessageReturnsBadRequestError() {
+    valkeyCache.delete("userPrompt");
+    valkeyCache.delete("userPrompt:quinn");
+    String token = signUpAndGetToken("quinn");
+    ListOfChatResponsePOJO created =
+        (ListOfChatResponsePOJO) createChat(token, "AI Chat");
+    String chatId = created.getChats().get(0).getChatId();
+    String tooLongMessage = "x".repeat(chatLimits.maxMessageLength() + 1);
+
+    ResponsePOJO response = core.userPrompt(
+        ChatRequestPOJO.builder().headers(Map.of(AUTH_HEADER, token))
+            .chatId(chatId).message(tooLongMessage).build());
+
+    assertThat(response.getHttpStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+  }
+
+  @Test
+  void searchChatWithTooLongQueryReturnsBadRequestError() {
+    valkeyCache.delete("searchChat");
+    valkeyCache.delete("searchChat:ruby");
+    String token = signUpAndGetToken("ruby");
+    String tooLongQuery = "x".repeat(chatLimits.maxSearchQueryLength() + 1);
+
+    ResponsePOJO response = core.searchChat(SearchRequestPOJO.builder()
+        .headers(Map.of(AUTH_HEADER, token)).query(tooLongQuery).build());
+
+    assertThat(response.getHttpStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+  }
+
+  @Test
+  void userPromptExceedingPerChatMessageCapReturnsBadRequestError() {
+    valkeyCache.delete("userPrompt");
+    valkeyCache.delete("userPrompt:sara");
+    String token = signUpAndGetToken("sara");
+    ListOfChatResponsePOJO created =
+        (ListOfChatResponsePOJO) createChat(token, "Long Chat");
+    String chatId = created.getChats().get(0).getChatId();
+    for (int i = 0; i < chatLimits.maxMessagesPerChat(); i++) {
+      userChatService.saveUserMessage("sara", chatId, "msg " + i);
+    }
+
+    ResponsePOJO response = core.userPrompt(
+        ChatRequestPOJO.builder().headers(Map.of(AUTH_HEADER, token))
+            .chatId(chatId).message("one more").build());
+
+    assertThat(response.getHttpStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+  }
+
+  @Test
+  void createChatRotatingSessionIdFromTheSameIpStillHitsARateLimit() {
+    valkeyCache.delete("createChat");
+    String sameIp = "203.0.113.5";
+    valkeyCache.delete("createChat:ip:" + sameIp);
+
+    // A rotated X-Session-Id per request defeats the per-session tier (each
+    // key is fresh), but the request must still be blocked once some tier's
+    // budget is exhausted -- proves rotation alone isn't a free pass.
+    ResponsePOJO response = null;
+    for (int i = 0; i < 31; i++) {
+      response =
+          core.createChat(ChatRequestPOJO.builder().chatTitle("Chat " + i)
+              .sessionId(StringUtils.generateUlid()).ipAddress(sameIp).build());
+    }
+
+    assertThat(response.getHttpStatusCode())
+        .isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+  }
+
+  @Test
+  void createChatIsBlockedByTheIpTierAloneEvenWithFreshGlobalAndUserBudget() {
+    String ip = "198.51.100.9";
+    valkeyCache.delete("createChat");
+    valkeyCache.delete("createChat:ip:" + ip);
+    // Saturate only the IP-tier key directly, leaving the global and
+    // per-session tiers completely fresh -- isolates that the IP tier is
+    // independently enforced, not just riding along with the global cap.
+    for (int i = 0; i < 30; i++) {
+      valkeyCache.incrementWithExpire("createChat:ip:" + ip, 60);
+    }
+
+    ResponsePOJO response =
+        core.createChat(ChatRequestPOJO.builder().chatTitle("Chat")
+            .sessionId(StringUtils.generateUlid()).ipAddress(ip).build());
+
+    assertThat(response.getHttpStatusCode())
+        .isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+  }
+
+  @Test
+  void userPromptExceedingRateLimitReturnsRetryAfterHeader() {
+    valkeyCache.delete("userPrompt");
+    valkeyCache.delete("userPrompt:oscar");
+    String token = signUpAndGetToken("oscar");
+
+    ResponsePOJO response = null;
+    for (int i = 0; i < 6; i++) {
+      response = core.userPrompt(
+          ChatRequestPOJO.builder().headers(Map.of(AUTH_HEADER, token))
+              .chatId(StringUtils.generateUlid()).message("Hi").build());
+    }
+
+    assertThat(response.getHttpStatusCode())
+        .isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+    assertThat(response.getHeaders()).containsEntry("Retry-After", "60");
   }
 
   private ResponsePOJO createChat(final String token, final String title) {

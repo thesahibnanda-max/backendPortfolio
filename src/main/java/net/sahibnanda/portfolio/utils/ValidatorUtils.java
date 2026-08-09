@@ -3,10 +3,11 @@ package net.sahibnanda.portfolio.utils;
 import jakarta.mail.internet.AddressException;
 import jakarta.mail.internet.InternetAddress;
 import lombok.experimental.UtilityClass;
+import net.sahibnanda.portfolio.exception.InputTooLongException;
 import net.sahibnanda.portfolio.exception.InvalidEmailException;
 import net.sahibnanda.portfolio.exception.InvalidPasswordException;
 
-/** Validation for email addresses and password strength. */
+/** Validation for email addresses, password strength, and chat input length. */
 @UtilityClass
 public final class ValidatorUtils {
 
@@ -75,5 +76,21 @@ public final class ValidatorUtils {
   private static boolean isAsciiSpecialCharacter(final int codePoint) {
     return codePoint <= MAX_ASCII_CODE_POINT
         && !Character.isLetterOrDigit(codePoint);
+  }
+
+  /**
+   * Validates that {@code value} does not exceed {@code maxLength} characters.
+   * A null value passes -- blank/required checks are the caller's job.
+   *
+   * @param value the value to check
+   * @param fieldName the name of the field, used in the thrown exception
+   * @param maxLength the maximum allowed length
+   * @throws InputTooLongException if value exceeds maxLength
+   */
+  public void validateMaxLength(final String value, final String fieldName,
+      final int maxLength) {
+    if (value != null && value.length() > maxLength) {
+      throw new InputTooLongException(fieldName, value.length(), maxLength);
+    }
   }
 }

@@ -3,6 +3,7 @@ package net.sahibnanda.portfolio.controller;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import net.sahibnanda.portfolio.core.Core;
+import net.sahibnanda.portfolio.middleware.ClientIpResolver;
 import net.sahibnanda.portfolio.middleware.SessionHeaderResolver;
 import net.sahibnanda.portfolio.pojo.ChatRequestPOJO;
 import net.sahibnanda.portfolio.pojo.ResponsePOJO;
@@ -40,17 +41,28 @@ public class Controller {
   private final SessionHeaderResolver sessionHeaderResolver;
 
   /**
+   * Resolves the caller's IP address for every request -- the middleware layer
+   * sitting between this controller and {@link Core}.
+   */
+  private final ClientIpResolver clientIpResolver;
+
+  /**
    * Constructs a new controller.
    *
    * @param coreService wires every operation this controller exposes
    * @param sessionHeaderResolverParam resolves the anonymous session id header
    *        for every request
+   * @param clientIpResolverParam resolves the caller's IP address for every
+   *        request
    */
   public Controller(final Core coreService,
-      final SessionHeaderResolver sessionHeaderResolverParam) {
+      final SessionHeaderResolver sessionHeaderResolverParam,
+      final ClientIpResolver clientIpResolverParam) {
     this.core = Objects.requireNonNull(coreService, "core is null");
     this.sessionHeaderResolver = Objects.requireNonNull(
         sessionHeaderResolverParam, "sessionHeaderResolver is null");
+    this.clientIpResolver = Objects.requireNonNull(clientIpResolverParam,
+        "clientIpResolver is null");
   }
 
   /**
@@ -68,7 +80,8 @@ public class Controller {
       final HttpServletRequest servletRequest,
       final HttpServletResponse servletResponse) {
     sessionHeaderResolver.resolveSessionId(servletRequest, servletResponse);
-    return toResponseEntity(core.signUp(request));
+    String clientIp = clientIpResolver.resolveClientIp(servletRequest);
+    return toResponseEntity(core.signUp(enrich(request, clientIp)));
   }
 
   /**
@@ -86,7 +99,8 @@ public class Controller {
       final HttpServletRequest servletRequest,
       final HttpServletResponse servletResponse) {
     sessionHeaderResolver.resolveSessionId(servletRequest, servletResponse);
-    return toResponseEntity(core.login(request));
+    String clientIp = clientIpResolver.resolveClientIp(servletRequest);
+    return toResponseEntity(core.login(enrich(request, clientIp)));
   }
 
   /**
@@ -112,8 +126,9 @@ public class Controller {
       final HttpServletResponse servletResponse) {
     String sessionId =
         sessionHeaderResolver.resolveSessionId(servletRequest, servletResponse);
+    String clientIp = clientIpResolver.resolveClientIp(servletRequest);
     return toResponseEntity(
-        core.createChat(enrich(request, authToken, sessionId)));
+        core.createChat(enrich(request, authToken, sessionId, clientIp)));
   }
 
   /**
@@ -133,8 +148,9 @@ public class Controller {
       final HttpServletResponse servletResponse) {
     String sessionId =
         sessionHeaderResolver.resolveSessionId(servletRequest, servletResponse);
-    ChatRequestPOJO request =
-        enrich(ChatRequestPOJO.builder().build(), authToken, sessionId);
+    String clientIp = clientIpResolver.resolveClientIp(servletRequest);
+    ChatRequestPOJO request = enrich(ChatRequestPOJO.builder().build(),
+        authToken, sessionId, clientIp);
     return toResponseEntity(core.allChats(request));
   }
 
@@ -157,8 +173,10 @@ public class Controller {
       final HttpServletResponse servletResponse) {
     String sessionId =
         sessionHeaderResolver.resolveSessionId(servletRequest, servletResponse);
-    ChatRequestPOJO request = enrich(
-        ChatRequestPOJO.builder().chatId(chatId).build(), authToken, sessionId);
+    String clientIp = clientIpResolver.resolveClientIp(servletRequest);
+    ChatRequestPOJO request =
+        enrich(ChatRequestPOJO.builder().chatId(chatId).build(), authToken,
+            sessionId, clientIp);
     return toResponseEntity(core.getChatById(request));
   }
 
@@ -183,8 +201,9 @@ public class Controller {
       final HttpServletResponse servletResponse) {
     String sessionId =
         sessionHeaderResolver.resolveSessionId(servletRequest, servletResponse);
+    String clientIp = clientIpResolver.resolveClientIp(servletRequest);
     ChatRequestPOJO merged = enrich(request.toBuilder().chatId(chatId).build(),
-        authToken, sessionId);
+        authToken, sessionId, clientIp);
     return toResponseEntity(core.updateTitle(merged));
   }
 
@@ -209,8 +228,9 @@ public class Controller {
       final HttpServletResponse servletResponse) {
     String sessionId =
         sessionHeaderResolver.resolveSessionId(servletRequest, servletResponse);
+    String clientIp = clientIpResolver.resolveClientIp(servletRequest);
     ChatRequestPOJO merged = enrich(request.toBuilder().chatId(chatId).build(),
-        authToken, sessionId);
+        authToken, sessionId, clientIp);
     return toResponseEntity(core.userPrompt(merged));
   }
 
@@ -233,8 +253,9 @@ public class Controller {
       final HttpServletResponse servletResponse) {
     String sessionId =
         sessionHeaderResolver.resolveSessionId(servletRequest, servletResponse);
+    String clientIp = clientIpResolver.resolveClientIp(servletRequest);
     return toResponseEntity(
-        core.searchChat(enrich(request, authToken, sessionId)));
+        core.searchChat(enrich(request, authToken, sessionId, clientIp)));
   }
 
   /**
@@ -351,17 +372,24 @@ public class Controller {
   }
 
   private static ChatRequestPOJO enrich(final ChatRequestPOJO request,
-      final String authToken, final String sessionId) {
+      final String authToken, final String sessionId, final String clientIp) {
     Map<String, String> headers =
         authToken == null ? Map.of() : Map.of(X_AUTH_TOKEN, authToken);
-    return request.toBuilder().headers(headers).sessionId(sessionId).build();
+    return request.toBuilder().headers(headers).sessionId(sessionId)
+        .ipAddress(clientIp).build();
   }
 
   private static SearchRequestPOJO enrich(final SearchRequestPOJO request,
-      final String authToken, final String sessionId) {
+      final String authToken, final String sessionId, final String clientIp) {
     Map<String, String> headers =
         authToken == null ? Map.of() : Map.of(X_AUTH_TOKEN, authToken);
-    return request.toBuilder().headers(headers).sessionId(sessionId).build();
+    return request.toBuilder().headers(headers).sessionId(sessionId)
+        .ipAddress(clientIp).build();
+  }
+
+  private static UserGateRequestPOJO enrich(final UserGateRequestPOJO request,
+      final String clientIp) {
+    return request.toBuilder().ipAddress(clientIp).build();
   }
 
   private static ResponseEntity<ResponsePOJO> toResponseEntity(

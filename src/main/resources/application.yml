@@ -34,6 +34,8 @@ spring:
         spring.json.trusted.packages: "*"
 server:
   port: 8080
+  tomcat:
+    max-swallow-size: 1MB
 
 groq:
   base-url: ${GROQ_BASE_URL:https://api.groq.com}
@@ -87,6 +89,14 @@ llm:
 
 auth:
   secret-key: ${AUTH_SECRET_KEY:local-dev-only-change-me}
+
+chat-limits:
+  max-message-length: 4000        # ~800-1000 tokens; generous for a real question/paragraph
+  max-chat-title-length: 200      # titles are short; blocks title-field abuse
+  max-search-query-length: 500    # queries are short phrases
+  max-history-messages: 20        # ~10 turn pairs kept intact per LLM call
+  max-history-chars: 12000        # secondary char budget in case 20 near-max messages still overflow
+  max-messages-per-chat: 200      # ~100 turns; beyond this, forces a new chat
 
 chat-observer:
   kafka-topics:
