@@ -10,7 +10,9 @@ import net.sahibnanda.portfolio.pojo.ErrorResponsePOJO;
  *     error
  * @param error the error response, or {@code null} on success
  */
-public record ChatStreamHandoff(ChatStreamContext context, ErrorResponsePOJO error) {
+public record ChatStreamHandoff(
+    ChatStreamContext context,
+    ErrorResponsePOJO error) {
 
   /**
    * Whether this handoff represents an error.

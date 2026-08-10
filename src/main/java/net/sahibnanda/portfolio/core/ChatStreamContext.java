@@ -20,4 +20,5 @@ public record ChatStreamContext(
     String chatId,
     String userMessage,
     List<Message> boundedHistory,
-    List<ContextType> requiredContexts) {}
+    List<ContextType> requiredContexts) {
+}
