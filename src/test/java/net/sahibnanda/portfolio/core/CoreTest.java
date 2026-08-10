@@ -47,10 +47,15 @@ class CoreTest extends AbstractRepositoryIntegrationTest {
   // createChat's global rate-limit key is now deliberately saturated by a
   // few tests below (the IP-tier regression tests) -- reset it before every
   // test so those don't leak a spent budget into whichever test happens to
-  // run next in the same 60s window.
+  // run next in the same 60s window. signUp's global key needs the same
+  // treatment: this class signs up 20+ distinct users across its tests, all
+  // well within signUp's 30-req/60s window on fast hardware, so without a
+  // reset the later signUp/login calls intermittently see a real 429 from
+  // budget the earlier tests already spent, not the behavior under test.
   @BeforeEach
-  void resetCreateChatRateLimit() {
+  void resetSharedRateLimits() {
     valkeyCache.delete("createChat");
+    valkeyCache.delete("signUp");
   }
 
   @Autowired

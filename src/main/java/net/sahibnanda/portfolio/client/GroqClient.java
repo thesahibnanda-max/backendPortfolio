@@ -201,7 +201,14 @@ public final class GroqClient {
           GroqCallResponse chunk =
               JsonUtils.fromJson(payload, GroqCallResponse.class);
           String content = extractDeltaContent(chunk);
-          if (!StringUtils.isEmpty(content)) {
+          // Deliberately not StringUtils.isEmpty(content): that method
+          // treats a whitespace-only string as empty, but a delta chunk
+          // consisting of a single standalone space is real, meaningful
+          // content (commonly the space Groq emits immediately before a
+          // digit-sequence token) -- collapsing it here silently glued
+          // words to the following number (e.g. "is1832" instead of
+          // "is 1832").
+          if (content != null && !content.isEmpty()) {
             accumulated.append(content);
             onDelta.accept(content);
           }
