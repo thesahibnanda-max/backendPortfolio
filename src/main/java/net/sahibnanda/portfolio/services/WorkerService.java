@@ -69,6 +69,54 @@ public final class WorkerService {
    */
   public String respond(final List<ContextType> requiredContexts,
       final List<Message> conversationHistory, final String userMessage) {
+    Prompts prompts =
+        buildPrompts(requiredContexts, conversationHistory, userMessage);
+
+    return llmService
+        .call(LLMCallOptions.builder().systemPrompt(prompts.systemPrompt())
+            .userPrompt(prompts.userPrompt()).build());
+  }
+
+  /**
+   * Answers the user's latest message, streaming the reply incrementally as it
+   * arrives.
+   *
+   * @param requiredContexts the domains the Orchestrator AI selected
+   * @param conversationHistory prior messages in the conversation, oldest first
+   * @param userMessage the user's latest message
+   * @param onToken callback invoked once per non-empty content chunk received
+   *        from the stream, in arrival order
+   * @return the full final natural-language answer, formed by concatenating
+   *         every content chunk delivered to {@code onToken}
+   * @throws IllegalArgumentException if {@code userMessage} is blank
+   * @throws net.sahibnanda.portfolio.exception.GroqCallException if the LLM
+   *         call fails
+   */
+  public String respondStream(final List<ContextType> requiredContexts,
+      final List<Message> conversationHistory, final String userMessage,
+      final java.util.function.Consumer<String> onToken) {
+    Prompts prompts =
+        buildPrompts(requiredContexts, conversationHistory, userMessage);
+
+    return llmService.callStream(
+        LLMCallOptions.builder().systemPrompt(prompts.systemPrompt())
+            .userPrompt(prompts.userPrompt()).build(),
+        onToken);
+  }
+
+  /**
+   * Validates {@code userMessage} and builds the system/user prompts shared by
+   * {@link #respond(List, List, String)} and
+   * {@link #respondStream(List, List, String, java.util.function.Consumer)}.
+   *
+   * @param requiredContexts the domains the Orchestrator AI selected
+   * @param conversationHistory prior messages in the conversation, oldest first
+   * @param userMessage the user's latest message
+   * @return the rendered system and user prompts
+   * @throws IllegalArgumentException if {@code userMessage} is blank
+   */
+  private Prompts buildPrompts(final List<ContextType> requiredContexts,
+      final List<Message> conversationHistory, final String userMessage) {
     if (StringUtils.isEmpty(userMessage)) {
       throw new IllegalArgumentException("userMessage is required.");
     }
@@ -80,7 +128,17 @@ public final class WorkerService {
     String userPrompt = promptTemplates.getUserPromptForWorkerAI(
         conversationHistory, userMessage, aggregatedContext);
 
-    return llmService.call(LLMCallOptions.builder().systemPrompt(systemPrompt)
-        .userPrompt(userPrompt).build());
+    return new Prompts(systemPrompt, userPrompt);
+  }
+
+  /**
+   * Holds the rendered system and user prompts shared by
+   * {@link #respond(List, List, String)} and
+   * {@link #respondStream(List, List, String, java.util.function.Consumer)}.
+   *
+   * @param systemPrompt the rendered system prompt
+   * @param userPrompt the rendered user prompt
+   */
+  private record Prompts(String systemPrompt, String userPrompt) {
   }
 }
