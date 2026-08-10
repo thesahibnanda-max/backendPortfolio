@@ -69,6 +69,31 @@ class GroqClientStreamTest {
   }
 
   @Test
+  void callStreamForwardsAStandaloneSpaceDeltaInsteadOfDroppingIt()
+      throws IOException {
+    // Regression test: a delta chunk whose content is JUST a space (as Groq
+    // commonly sends immediately before a digit-sequence token) must be
+    // forwarded like any other chunk, not treated as "empty" -- dropping it
+    // previously glued the surrounding words to the number (e.g. "is1832"
+    // instead of "is 1832").
+    String body = "data: {\"choices\":[{\"delta\":{\"content\":\"is\"}}]}\n\n"
+        + "data: {\"choices\":[{\"delta\":{\"content\":\" \"}}]}\n\n"
+        + "data: {\"choices\":[{\"delta\":{\"content\":\"1832\"}}]}\n\n"
+        + "data: [DONE]\n\n";
+
+    try (FakeHttpServer server = FakeHttpServer.streaming(200, "OK", body)) {
+
+      GroqClient client = clientFor(server.port());
+      List<String> deltas = new ArrayList<>();
+
+      String result = client.callStream(sampleRequest(), deltas::add);
+
+      assertThat(deltas).containsExactly("is", " ", "1832");
+      assertThat(result).isEqualTo("is 1832");
+    }
+  }
+
+  @Test
   void callStreamSkipsLinesThatAreNotDataPrefixed() throws IOException {
     String body = ": keep-alive\n\n"
         + "data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}\n\n" + "\n"
