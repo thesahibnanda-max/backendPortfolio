@@ -3,6 +3,7 @@ package net.sahibnanda.portfolio.client;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.function.Consumer;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import net.sahibnanda.portfolio.config.GroqProperties;
@@ -18,6 +19,7 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
+import okio.BufferedSource;
 import org.springframework.stereotype.Component;
 
 /**
@@ -52,6 +54,12 @@ public final class GroqClient {
   /** Path segments identifying the chat completions endpoint. */
   private static final String[] CHAT_COMPLETIONS_PATH =
       {"openai", "v1", "chat", "completions"};
+
+  /** Prefix identifying a data line within a Groq SSE stream. */
+  private static final String SSE_DATA_PREFIX = "data: ";
+
+  /** Sentinel payload marking the end of a Groq SSE stream. */
+  private static final String SSE_DONE_SENTINEL = "[DONE]";
 
   /** Groq configuration this client was constructed with. */
   private final GroqProperties properties;
@@ -128,6 +136,96 @@ public final class GroqClient {
       log.error("Failed to call Groq API.", e);
       throw new GroqCallException("Failed to call Groq API.", e);
     }
+  }
+
+  /**
+   * Sends a chat completion request to the Groq API and streams the response as
+   * it arrives over Server-Sent Events (SSE).
+   *
+   * @param request the chat completion request to send
+   * @param onDelta callback invoked once per non-empty content chunk received
+   *        from the stream, in arrival order
+   * @return the full completion text, formed by concatenating every content
+   *         chunk delivered to {@code onDelta}
+   * @throws IllegalArgumentException if the request is missing a model or has
+   *         no messages
+   * @throws GroqCallException if the Groq API call fails
+   */
+  public String callStream(@NonNull final GroqCallRequest request,
+      @NonNull final Consumer<String> onDelta) {
+
+    validateRequest(request);
+
+    RequestBody requestBody =
+        RequestBody.create(JsonUtils.toJson(request), JSON);
+
+    Request httpRequest = new Request.Builder().url(chatCompletionsUrl)
+        // Add the Authorization header with the API key
+        .header("Authorization", "Bearer " + properties.getApiKey())
+        .post(requestBody).build();
+
+    try (Response response = HTTP_CLIENT.newCall(httpRequest).execute()) {
+
+      if (!response.isSuccessful()) {
+        ResponseBody body = response.body();
+        String responseBody = body != null ? body.string() : "";
+        log.error("Groq API request failed. HTTP {}: {}", response.code(),
+            responseBody);
+        throw new GroqCallException(
+            String.format("Groq API request failed. HTTP %d: %s",
+                response.code(), responseBody));
+      }
+
+      StringBuilder accumulated = new StringBuilder();
+      ResponseBody body = response.body();
+      BufferedSource source = body != null ? body.source() : null;
+
+      if (source != null) {
+        String line;
+        while ((line = source.readUtf8Line()) != null) {
+
+          if (!line.startsWith(SSE_DATA_PREFIX)) {
+            continue;
+          }
+
+          String payload = line.substring(SSE_DATA_PREFIX.length());
+          if (SSE_DONE_SENTINEL.equals(payload)) {
+            break;
+          }
+
+          GroqCallResponse chunk =
+              JsonUtils.fromJson(payload, GroqCallResponse.class);
+          String content = extractDeltaContent(chunk);
+          if (!StringUtils.isEmpty(content)) {
+            accumulated.append(content);
+            onDelta.accept(content);
+          }
+        }
+      }
+
+      return accumulated.toString();
+
+    } catch (IOException e) {
+      log.error("Failed to stream from Groq API.", e);
+      throw new GroqCallException("Failed to stream from Groq API.", e);
+    }
+  }
+
+  /**
+   * Extracts the incremental delta content from a single streamed chat
+   * completion chunk, tolerating chunks whose {@code choices}, {@code delta},
+   * or {@code content} are absent.
+   *
+   * @param chunk the streamed chat completion chunk to inspect
+   * @return the delta content, or {@code null} if the chunk carries none
+   */
+  private static String extractDeltaContent(final GroqCallResponse chunk) {
+    if (chunk == null || chunk.getChoices() == null
+        || chunk.getChoices().isEmpty()) {
+      return null;
+    }
+    GroqCallResponse.Delta delta = chunk.getChoices().get(0).getDelta();
+    return delta != null ? delta.getContent() : null;
   }
 
   /**
