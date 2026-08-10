@@ -42,6 +42,8 @@ import net.sahibnanda.portfolio.objects.ProfileDetails;
 import net.sahibnanda.portfolio.objects.UserObject;
 import net.sahibnanda.portfolio.pojo.ChatRequestPOJO;
 import net.sahibnanda.portfolio.pojo.ChatResponsePOJO;
+import net.sahibnanda.portfolio.pojo.ChatStreamDonePOJO;
+import net.sahibnanda.portfolio.pojo.ChatStreamTokenPOJO;
 import net.sahibnanda.portfolio.pojo.CodeforcesDetailsResponsePOJO;
 import net.sahibnanda.portfolio.pojo.ErrorResponsePOJO;
 import net.sahibnanda.portfolio.pojo.GitHubDetailsResponsePOJO;
@@ -65,12 +67,16 @@ import net.sahibnanda.portfolio.services.SearchService;
 import net.sahibnanda.portfolio.services.UserChatService;
 import net.sahibnanda.portfolio.services.WorkerService;
 import net.sahibnanda.portfolio.utils.ConversationHistoryUtils;
+import net.sahibnanda.portfolio.utils.JsonUtils;
 import net.sahibnanda.portfolio.utils.StringUtils;
 import net.sahibnanda.portfolio.utils.TokenUtils;
 import net.sahibnanda.portfolio.utils.ValidatorUtils;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -491,6 +497,130 @@ public class Core {
       return buildChatResponse(HttpStatus.OK, updatedChat);
     } catch (Exception e) {
       return buildErrorResponse(e);
+    }
+  }
+
+  /**
+   * Runs every validation, rate-limit, and routing step {@link #userPrompt}
+   * runs today, stopping just short of calling the Worker AI -- the streaming
+   * counterpart to {@code userPrompt}'s setup phase, used by the SSE endpoint
+   * so the Worker call itself can stream tokens back to the caller instead of
+   * blocking for the full answer.
+   *
+   * @param request the auth-token header and/or resolved session id, the chat
+   *        identifier, and the message to send
+   * @return a non-error {@link ChatStreamHandoff} whose {@code context} means
+   *         routing succeeded and {@link #streamWorkerAnswer} can proceed; an
+   *         error {@link ChatStreamHandoff} means the caller should send the
+   *         embedded {@link ErrorResponsePOJO} back as a normal JSON error
+   *         response, without ever opening an SSE stream
+   */
+  public ChatStreamHandoff prepareUserPromptStream(
+      final ChatRequestPOJO request) {
+    try {
+      boolean authenticated = isAuthenticated(request);
+      String callerId =
+          authenticated ? extractUsername(request) : extractSessionId(request);
+      String rateLimitKey = authenticated ? callerId : "anon:" + callerId;
+      enforceRateLimit(API_USER_PROMPT, rateLimitKey, request.getIpAddress());
+      ValidatorUtils.validateMaxLength(request.getMessage(), "message",
+          chatLimits.maxMessageLength());
+
+      ChatObject existingChat = authenticated
+          ? userChatService.getChatById(callerId, request.getChatId())
+          : anonymousChatService.getChatById(callerId, request.getChatId());
+      List<Message> history = existingChat.getMessages();
+      if (history.size() >= chatLimits.maxMessagesPerChat()) {
+        throw new ConversationTooLongException(request.getChatId(),
+            chatLimits.maxMessagesPerChat());
+      }
+      List<Message> boundedHistory = ConversationHistoryUtils.truncate(history,
+          chatLimits.maxHistoryMessages(), chatLimits.maxHistoryChars());
+      OrchestratorResponse routing =
+          orchestratorService.route(boundedHistory, request.getMessage());
+      log.info("Orchestrator routed to {} ({})", routing.getRequiredContexts(),
+          routing.getReason());
+
+      return new ChatStreamHandoff(new ChatStreamContext(authenticated,
+          callerId, request.getChatId(), request.getMessage(), boundedHistory,
+          routing.getRequiredContexts()), null);
+    } catch (Exception e) {
+      return new ChatStreamHandoff(null, buildErrorResponse(e));
+    }
+  }
+
+  /**
+   * Streams the Worker AI's answer to {@code emitter} as it is generated, then
+   * persists both the user's message and the full assistant answer once the
+   * stream completes successfully. Sends zero-or-more SSE {@code token} events
+   * (each carrying a {@link ChatStreamTokenPOJO}), followed by exactly one
+   * terminal event: {@code done} (carrying a {@link ChatStreamDonePOJO}) on
+   * success, or {@code error} (carrying an {@link ErrorResponsePOJO}) on
+   * failure. {@code emitter.complete()} is always called after the terminal
+   * event, regardless of outcome.
+   *
+   * @param context the prepared streaming context returned by a non-error
+   *        {@link #prepareUserPromptStream}
+   * @param emitter the SSE emitter to stream events to
+   */
+  public void streamWorkerAnswer(final ChatStreamContext context,
+      final SseEmitter emitter) {
+    StringBuilder accumulated = new StringBuilder();
+    try {
+      String answer = workerService.respondStream(context.requiredContexts(),
+          context.boundedHistory(), context.userMessage(), delta -> {
+            accumulated.append(delta);
+            sendEvent(emitter, "token", context.chatId(),
+                ChatStreamTokenPOJO.builder().content(delta).build());
+          });
+
+      ChatObject updatedChat;
+      if (context.authenticated()) {
+        userChatService.saveUserMessage(context.callerId(), context.chatId(),
+            context.userMessage());
+        updatedChat = userChatService.saveAssistantMessage(context.callerId(),
+            context.chatId(), answer);
+      } else {
+        anonymousChatService.saveUserMessage(context.callerId(),
+            context.chatId(), context.userMessage());
+        updatedChat = anonymousChatService
+            .saveAssistantMessage(context.callerId(), context.chatId(), answer);
+      }
+      Message lastMessage = updatedChat.getMessages().getLast();
+      sendEvent(emitter, "done", context.chatId(), ChatStreamDonePOJO.builder()
+          .message(answer).timestamp(lastMessage.timestamp()).build());
+      emitter.complete();
+    } catch (GroqCallException e) {
+      log.error("Groq streaming call failed for chat {}", context.chatId(), e);
+      sendEvent(emitter, "error", context.chatId(), upstreamError());
+      emitter.complete();
+    } catch (Exception e) {
+      log.error("Unexpected failure while streaming chat {}", context.chatId(),
+          e);
+      sendEvent(emitter, "error", context.chatId(), genericError());
+      emitter.complete();
+    }
+  }
+
+  /**
+   * Sends a single named SSE event with a JSON-serialized payload, swallowing
+   * (and logging) an {@link IOException} if the client has already disconnected
+   * -- there is nothing further this method can do about a broken connection,
+   * and the stream is already being torn down by its caller regardless.
+   *
+   * @param emitter the SSE emitter to send the event on
+   * @param name the SSE event name (e.g. {@code "token"}, {@code "done"},
+   *        {@code "error"})
+   * @param chatId the chat identifier, used only for logging on failure
+   * @param data the event payload, serialized to JSON
+   */
+  private void sendEvent(final SseEmitter emitter, final String name,
+      final String chatId, final Object data) {
+    try {
+      emitter.send(SseEmitter.event().name(name).data(JsonUtils.toJson(data),
+          MediaType.APPLICATION_JSON));
+    } catch (IOException e) {
+      log.warn("Client disconnected mid-stream for chat {}", chatId, e);
     }
   }
 
