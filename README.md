@@ -238,3 +238,4 @@ chats), and [`API.md`](API.md) for the full HTTP API reference.
 ## License
 
 BSD 3-Clause -- see [`LICENSE`](LICENSE).
+
