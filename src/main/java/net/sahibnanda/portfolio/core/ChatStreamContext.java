@@ -14,11 +14,7 @@ import net.sahibnanda.portfolio.enums.ContextType;
  * @param boundedHistory the truncated conversation history
  * @param requiredContexts the knowledge domains required to answer the question
  */
-public record ChatStreamContext(
-    boolean authenticated,
-    String callerId,
-    String chatId,
-    String userMessage,
-    List<Message> boundedHistory,
+public record ChatStreamContext(boolean authenticated, String callerId,
+    String chatId, String userMessage, List<Message> boundedHistory,
     List<ContextType> requiredContexts) {
 }
