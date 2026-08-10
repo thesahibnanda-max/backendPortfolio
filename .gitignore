@@ -47,3 +47,6 @@ logs/
 *.pem
 *.crt
 *.key
+
+# Local worktrees (git worktree add)
+.worktrees/
