@@ -2,22 +2,38 @@ package net.sahibnanda.portfolio.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
+import java.util.function.Consumer;
 import net.sahibnanda.portfolio.cache.ValkeyCache;
+import net.sahibnanda.portfolio.config.ChatLimitsProperties;
+import net.sahibnanda.portfolio.objects.OrchestratorResponse;
 import net.sahibnanda.portfolio.repository.AbstractRepositoryIntegrationTest;
+import net.sahibnanda.portfolio.services.OrchestratorService;
+import net.sahibnanda.portfolio.services.WorkerService;
+import net.sahibnanda.portfolio.utils.StringUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -30,14 +46,30 @@ class ControllerTest extends AbstractRepositoryIntegrationTest {
   @Autowired
   private ValkeyCache valkeyCache;
 
+  @Autowired
+  private ChatLimitsProperties chatLimits;
+
+  @MockitoBean
+  private OrchestratorService orchestratorService;
+
+  @MockitoBean
+  private WorkerService workerService;
+
   // createChat's global rate-limit key is deliberately saturated by
   // createChatExceedingRateLimitReturns429WithRetryAfterHeader below --
   // reset it before every test so that doesn't leak a spent budget into
   // whichever test happens to run next in the same 60s window.
+  //
+  // userPromptStream shares its rate-limit key ("userPrompt") with
+  // Core#userPrompt, and that key lives in the same shared Valkey instance
+  // used by every other test class in the suite (e.g. CoreTest's
+  // userPrompt rate-limit test deliberately exhausts its budget) -- reset
+  // it too so this class's userPromptStream tests always start fresh.
   @BeforeEach
-  void resetCreateChatRateLimit() {
+  void resetRateLimits() {
     valkeyCache.delete("createChat");
     valkeyCache.delete("createChat:ip:127.0.0.1");
+    valkeyCache.delete("userPrompt");
   }
 
   @Test
@@ -216,6 +248,123 @@ class ControllerTest extends AbstractRepositoryIntegrationTest {
 
     String chatId = response.get("chats").get(0).get("chatId").asText();
     assertThat(response.get("scores").has(chatId)).isTrue();
+  }
+
+  @Test
+  void userPromptStreamForUnknownChatReturnsNotFoundJsonWithoutOpeningSse()
+      throws Exception {
+    valkeyCache.delete("userPrompt:aiden");
+    String signUpBody = mockMvc
+        .perform(
+            post("/signup").contentType(MediaType.APPLICATION_JSON).content("""
+                {"username":"aiden","password":"Str0ng!Pass"}"""))
+        .andReturn().getResponse().getHeader("X-Auth-Token");
+
+    mockMvc
+        .perform(
+            post("/chats/" + StringUtils.generateUlid() + "/messages/stream")
+                .header("X-Auth-Token", signUpBody)
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                    {"message":"Hello"}"""))
+        .andExpect(request().asyncNotStarted()).andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.errorMessage").exists());
+  }
+
+  @Test
+  void userPromptStreamWithOverLongMessageReturnsBadRequest() throws Exception {
+    valkeyCache.delete("userPrompt:brooke");
+    String signUpBody = mockMvc
+        .perform(
+            post("/signup").contentType(MediaType.APPLICATION_JSON).content("""
+                {"username":"brooke","password":"Str0ng!Pass"}"""))
+        .andReturn().getResponse().getHeader("X-Auth-Token");
+    String createResponse = mockMvc
+        .perform(post("/chats").header("X-Auth-Token", signUpBody)
+            .contentType(MediaType.APPLICATION_JSON).content("""
+                {"chatTitle":"AI Chat"}"""))
+        .andExpect(status().isCreated()).andReturn().getResponse()
+        .getContentAsString();
+    String chatId = new ObjectMapper().readTree(createResponse).get("chats")
+        .get(0).get("chatId").asText();
+    String tooLongMessage = "x".repeat(chatLimits.maxMessageLength() + 1);
+
+    mockMvc
+        .perform(post("/chats/" + chatId + "/messages/stream")
+            .header("X-Auth-Token", signUpBody)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"message\":\"" + tooLongMessage + "\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  // Verifies the full SSE round trip through real MockMvc async dispatch,
+  // rather than falling back to mocking Core itself: Spring MVC Test's
+  // documented pattern for async controller methods is perform() ->
+  // assert request().asyncStarted() -> asyncDispatch(result) on a second
+  // perform() once the async processing has completed. Since
+  // streamWorkerAnswer runs on a separate virtual thread started by the
+  // controller, "completed" can't be assumed the instant the first
+  // perform() returns -- MvcResult#getAsyncResult(timeoutMillis) is the
+  // supported blocking wait for that: it blocks on the same
+  // CountDownLatch the mock async context's onComplete/onError/onTimeout
+  // listeners release, so it returns as soon as the SseEmitter's
+  // complete() call (issued by Core.streamWorkerAnswer, on the worker
+  // thread) finishes the request -- no manual Thread.sleep or busy-poll
+  // needed.
+  @Test
+  void userPromptStreamHappyPathStreamsTokensThenDoneAndPersistsBothMessages()
+      throws Exception {
+    valkeyCache.delete("userPrompt:river");
+    when(orchestratorService.route(anyList(), anyString()))
+        .thenReturn(OrchestratorResponse.builder().requiredContexts(List.of())
+            .reason("no context needed").build());
+    doAnswer(invocation -> {
+      Consumer<String> onToken = invocation.getArgument(3);
+      onToken.accept("Hello");
+      onToken.accept(", world!");
+      return "Hello, world!";
+    }).when(workerService).respondStream(any(), anyList(), anyString(), any());
+
+    String signUpBody = mockMvc
+        .perform(
+            post("/signup").contentType(MediaType.APPLICATION_JSON).content("""
+                {"username":"river","password":"Str0ng!Pass"}"""))
+        .andReturn().getResponse().getHeader("X-Auth-Token");
+    String createResponse = mockMvc
+        .perform(post("/chats").header("X-Auth-Token", signUpBody)
+            .contentType(MediaType.APPLICATION_JSON).content("""
+                {"chatTitle":"AI Chat"}"""))
+        .andExpect(status().isCreated()).andReturn().getResponse()
+        .getContentAsString();
+    String chatId = new ObjectMapper().readTree(createResponse).get("chats")
+        .get(0).get("chatId").asText();
+
+    MvcResult result = mockMvc
+        .perform(post("/chats/" + chatId + "/messages/stream")
+            .header("X-Auth-Token", signUpBody)
+            .contentType(MediaType.APPLICATION_JSON).content("""
+                {"message":"Hi there"}"""))
+        .andExpect(request().asyncStarted()).andReturn();
+
+    // Blocks until Core.streamWorkerAnswer's virtual thread calls
+    // emitter.complete(), rather than racing it.
+    result.getAsyncResult(5_000);
+
+    mockMvc.perform(asyncDispatch(result)).andExpect(status().isOk()).andExpect(
+        content().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM));
+
+    // Spring's SseEmitter serializes each event as "event:<name>\ndata:
+    // <json>\n\n" -- confirmed here directly against the observed body
+    // rather than assumed.
+    String body = result.getResponse().getContentAsString();
+    assertThat(body).contains("event:token\ndata:");
+    assertThat(body).contains("event:done\ndata:");
+
+    mockMvc.perform(get("/chats/" + chatId).header("X-Auth-Token", signUpBody))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.chat.messages", hasSize(2)))
+        .andExpect(jsonPath("$.chat.messages[0].message").value("Hi there"))
+        .andExpect(
+            jsonPath("$.chat.messages[1].message").value("Hello, world!"));
   }
 
   @Test
