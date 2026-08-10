@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -247,6 +248,50 @@ class CoreStreamTest extends AbstractRepositoryIntegrationTest {
 
     ChatObject chat = userChatService.getChatById("yusuf", chatId);
     assertThat(chat.getMessages()).isEmpty();
+  }
+
+  /**
+   * Regression test for the review finding that {@code emitter.complete()}
+   * could be skipped: Spring's real {@code SseEmitter.send(...)} throws
+   * {@link IllegalStateException} (not {@link IOException}) once the emitter
+   * has already completed -- e.g. its 180s timeout already fired -- and that
+   * used to unwind past every {@code emitter.complete()} call site since only
+   * {@code IOException} was ever caught. This mock throws that same
+   * {@link IllegalStateException} from every {@code send(...)} call (token and
+   * terminal alike) and asserts {@code complete()} is still called exactly
+   * once, verifying both the {@code sendEvent} exception-type widening and the
+   * move of {@code complete()} into a {@code finally} block.
+   */
+  @Test
+  void streamWorkerAnswerCallsCompleteExactlyOnceEvenWhenEveryEmitterSendFails()
+      throws IOException {
+    String token = signUpAndGetToken("ivy");
+    String chatId = createChatId(token, "AI Chat");
+    doAnswer(invocation -> {
+      Consumer<String> onToken = invocation.getArgument(3);
+      onToken.accept("Hello");
+      onToken.accept(" world");
+      return "Hello world";
+    }).when(workerService).respondStream(any(), anyList(), anyString(), any());
+
+    ChatStreamContext context = new ChatStreamContext(true, "ivy", chatId,
+        "Hi there", List.of(), List.of());
+    SseEmitter emitter = mock(SseEmitter.class);
+    doThrow(new IllegalStateException(
+        "ResponseBodyEmitter has already " + "completed")).when(emitter)
+        .send(any(SseEmitter.SseEventBuilder.class));
+
+    core.streamWorkerAnswer(context, emitter);
+
+    // Two token sends plus one "done" send, every one of them throwing.
+    verify(emitter, times(3)).send(any(SseEmitter.SseEventBuilder.class));
+    verify(emitter, times(1)).complete();
+
+    // The Worker call itself still succeeded, so persistence still happens --
+    // a failed emitter send must not be conflated with a failed answer.
+    ChatObject chat = userChatService.getChatById("ivy", chatId);
+    assertThat(chat.getMessages()).hasSize(2);
+    assertThat(chat.getMessages().get(1).message()).isEqualTo("Hello world");
   }
 
   /**

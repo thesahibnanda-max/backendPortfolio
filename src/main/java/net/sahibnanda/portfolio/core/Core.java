@@ -76,12 +76,12 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -556,8 +556,12 @@ public class Core {
    * (each carrying a {@link ChatStreamTokenPOJO}), followed by exactly one
    * terminal event: {@code done} (carrying a {@link ChatStreamDonePOJO}) on
    * success, or {@code error} (carrying an {@link ErrorResponsePOJO}) on
-   * failure. {@code emitter.complete()} is always called after the terminal
-   * event, regardless of outcome.
+   * failure. {@code emitter.complete()} is always called exactly once, in a
+   * {@code finally} block, regardless of outcome -- including when
+   * {@link #sendEvent} itself fails (e.g. the emitter already timed out or the
+   * client disconnected) or an unexpected {@link Throwable} escapes the Worker
+   * call. {@code ResponseBodyEmitter.complete()} is idempotent, so calling it
+   * unconditionally here is safe even when a terminal event was already sent.
    *
    * @param context the prepared streaming context returned by a non-error
    *        {@link #prepareUserPromptStream}
@@ -565,14 +569,13 @@ public class Core {
    */
   public void streamWorkerAnswer(final ChatStreamContext context,
       final SseEmitter emitter) {
-    StringBuilder accumulated = new StringBuilder();
+    AtomicBoolean loggedSendFailure = new AtomicBoolean(false);
     try {
       String answer = workerService.respondStream(context.requiredContexts(),
-          context.boundedHistory(), context.userMessage(), delta -> {
-            accumulated.append(delta);
-            sendEvent(emitter, "token", context.chatId(),
-                ChatStreamTokenPOJO.builder().content(delta).build());
-          });
+          context.boundedHistory(), context.userMessage(),
+          delta -> sendEvent(emitter, "token", context.chatId(),
+              ChatStreamTokenPOJO.builder().content(delta).build(),
+              loggedSendFailure));
 
       ChatObject updatedChat;
       if (context.authenticated()) {
@@ -587,40 +590,57 @@ public class Core {
             .saveAssistantMessage(context.callerId(), context.chatId(), answer);
       }
       Message lastMessage = updatedChat.getMessages().getLast();
-      sendEvent(emitter, "done", context.chatId(), ChatStreamDonePOJO.builder()
-          .message(answer).timestamp(lastMessage.timestamp()).build());
-      emitter.complete();
+      sendEvent(
+          emitter, "done", context.chatId(), ChatStreamDonePOJO.builder()
+              .message(answer).timestamp(lastMessage.timestamp()).build(),
+          loggedSendFailure);
     } catch (GroqCallException e) {
       log.error("Groq streaming call failed for chat {}", context.chatId(), e);
-      sendEvent(emitter, "error", context.chatId(), upstreamError());
-      emitter.complete();
+      sendEvent(emitter, "error", context.chatId(), upstreamError(),
+          loggedSendFailure);
     } catch (Exception e) {
       log.error("Unexpected failure while streaming chat {}", context.chatId(),
           e);
-      sendEvent(emitter, "error", context.chatId(), genericError());
+      sendEvent(emitter, "error", context.chatId(), genericError(),
+          loggedSendFailure);
+    } finally {
       emitter.complete();
     }
   }
 
   /**
    * Sends a single named SSE event with a JSON-serialized payload, swallowing
-   * (and logging) an {@link IOException} if the client has already disconnected
-   * -- there is nothing further this method can do about a broken connection,
-   * and the stream is already being torn down by its caller regardless.
+   * any failure the underlying {@code emitter.send(...)} throws -- not only
+   * {@link java.io.IOException} (a live client disconnect), but also, notably,
+   * {@link IllegalStateException}, which Spring's {@code SseEmitter} throws
+   * once the emitter has already completed (e.g. its timeout already fired, or
+   * the container already errored the async request). There is nothing further
+   * this method can do about either case, and the stream is already being torn
+   * down by its caller regardless. To avoid one full stack trace per remaining
+   * token once a client has disconnected, the failure is logged at {@code warn}
+   * only the first time it happens per stream; {@code loggedSendFailure} tracks
+   * that across the repeated calls this method receives during one
+   * {@link #streamWorkerAnswer} invocation.
    *
    * @param emitter the SSE emitter to send the event on
    * @param name the SSE event name (e.g. {@code "token"}, {@code "done"},
    *        {@code "error"})
    * @param chatId the chat identifier, used only for logging on failure
    * @param data the event payload, serialized to JSON
+   * @param loggedSendFailure shared, per-stream flag; set to {@code true} the
+   *        first time a send fails so later failures in the same stream are
+   *        swallowed without another log line
    */
   private void sendEvent(final SseEmitter emitter, final String name,
-      final String chatId, final Object data) {
+      final String chatId, final Object data,
+      final AtomicBoolean loggedSendFailure) {
     try {
       emitter.send(SseEmitter.event().name(name).data(JsonUtils.toJson(data),
           MediaType.APPLICATION_JSON));
-    } catch (IOException e) {
-      log.warn("Client disconnected mid-stream for chat {}", chatId, e);
+    } catch (Exception e) {
+      if (loggedSendFailure.compareAndSet(false, true)) {
+        log.warn("Client disconnected mid-stream for chat {}", chatId, e);
+      }
     }
   }
 

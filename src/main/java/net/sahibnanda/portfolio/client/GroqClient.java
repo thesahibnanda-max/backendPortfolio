@@ -149,7 +149,10 @@ public final class GroqClient {
    *         chunk delivered to {@code onDelta}
    * @throws IllegalArgumentException if the request is missing a model or has
    *         no messages
-   * @throws GroqCallException if the Groq API call fails
+   * @throws GroqCallException if the Groq API call fails, or if the stream ends
+   *         (end of input) without ever delivering the {@code [DONE]} sentinel
+   *         -- treating a mid-stream Groq failure as a complete answer would
+   *         let a truncated response be persisted as if it were whole
    */
   public String callStream(@NonNull final GroqCallRequest request,
       @NonNull final Consumer<String> onDelta) {
@@ -180,6 +183,7 @@ public final class GroqClient {
       ResponseBody body = response.body();
       BufferedSource source = body != null ? body.source() : null;
 
+      boolean sawDoneSentinel = false;
       if (source != null) {
         String line;
         while ((line = source.readUtf8Line()) != null) {
@@ -190,6 +194,7 @@ public final class GroqClient {
 
           String payload = line.substring(SSE_DATA_PREFIX.length());
           if (SSE_DONE_SENTINEL.equals(payload)) {
+            sawDoneSentinel = true;
             break;
           }
 
@@ -201,6 +206,14 @@ public final class GroqClient {
             onDelta.accept(content);
           }
         }
+      }
+
+      if (!sawDoneSentinel) {
+        log.error(
+            "Groq stream for chat ended before completion (no [DONE] "
+                + "sentinel); {} chars of partial content discarded.",
+            accumulated.length());
+        throw new GroqCallException("Groq stream ended before completion.");
       }
 
       return accumulated.toString();

@@ -124,6 +124,25 @@ class GroqClientStreamTest {
   }
 
   @Test
+  void callStreamThrowsGroqCallExceptionWhenStreamEndsWithoutDoneSentinel()
+      throws IOException {
+    String body = "data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}\n\n"
+        + "data: {\"choices\":[{\"delta\":{\"content\":\" there\"}}]}\n\n";
+
+    try (FakeHttpServer server = FakeHttpServer.streaming(200, "OK", body)) {
+
+      GroqClient client = clientFor(server.port());
+      List<String> deltas = new ArrayList<>();
+
+      assertThatThrownBy(() -> client.callStream(sampleRequest(), deltas::add))
+          .isInstanceOf(GroqCallException.class)
+          .hasMessage("Groq stream ended before completion.");
+
+      assertThat(deltas).containsExactly("Hi", " there");
+    }
+  }
+
+  @Test
   void callStreamWrapsIoExceptionFromTruncatedResponse() throws IOException {
     String body =
         "data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n";
