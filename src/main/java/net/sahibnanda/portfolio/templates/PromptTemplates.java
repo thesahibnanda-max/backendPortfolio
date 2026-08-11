@@ -64,6 +64,19 @@ public final class PromptTemplates {
   }
 
   /**
+   * Renders the MCP AI's system prompt: like the Worker AI's, but describing
+   * self-directed tool use instead of pre-supplied context.
+   *
+   * @param name the portfolio owner's name, or an empty string if unavailable
+   * @return the rendered system prompt
+   */
+  public String getSystemPromptForMcpAI(final String name) {
+    StringOutput output = new StringOutput();
+    templateEngine.render("mcp-system.jte", Map.of("name", name), output);
+    return output.toString();
+  }
+
+  /**
    * Renders the Worker AI's user-turn prompt: aggregated context, prior
    * conversation history, then the current message.
    *
