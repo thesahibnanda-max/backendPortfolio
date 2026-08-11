@@ -136,4 +136,58 @@ class LLMServiceUnitTest {
     assertThat(result).isEqualTo("extracted reply");
     assertThat(requestCaptor.getValue().isStream()).isFalse();
   }
+
+  @Test
+  void callWithToolsSendsStreamFalseAndOmitsToolsWhenNoneGiven() {
+    GroqCallResponse response = GroqCallResponse.builder()
+        .choices(List.of(GroqCallResponse.Choice.builder().message(
+            GroqCallResponse.Message.builder().content("final answer").build())
+            .build()))
+        .build();
+    when(groqClient.call(any(GroqCallRequest.class))).thenReturn(response);
+
+    List<GroqCallRequest.Message> messages = List.of(
+        GroqCallRequest.Message.builder().role("system").content("sys").build(),
+        GroqCallRequest.Message.builder().role("user").content("hi").build());
+
+    GroqCallResponse result = llmService.callWithTools(messages, List.of());
+
+    ArgumentCaptor<GroqCallRequest> requestCaptor =
+        ArgumentCaptor.forClass(GroqCallRequest.class);
+    verify(groqClient).call(requestCaptor.capture());
+    verifyNoMoreInteractions(groqClient);
+
+    assertThat(result).isSameAs(response);
+    assertThat(requestCaptor.getValue().isStream()).isFalse();
+    assertThat(requestCaptor.getValue().getTools()).isNull();
+    assertThat(requestCaptor.getValue().getMessages()).isEqualTo(messages);
+  }
+
+  @Test
+  void callWithToolsAttachesTheGivenToolsWhenNonEmpty() {
+    GroqCallResponse response = GroqCallResponse.builder()
+        .choices(List.of(GroqCallResponse.Choice.builder().message(
+            GroqCallResponse.Message.builder().content("final answer").build())
+            .build()))
+        .build();
+    when(groqClient.call(any(GroqCallRequest.class))).thenReturn(response);
+
+    GroqCallRequest.Tool tool =
+        GroqCallRequest.Tool.builder().type("function")
+            .function(GroqCallRequest.ToolFunction.builder()
+                .name("get_leetcode_details").description("desc")
+                .parameters(Map.of()).build())
+            .build();
+    List<GroqCallRequest.Message> messages = List.of(
+        GroqCallRequest.Message.builder().role("system").content("sys").build(),
+        GroqCallRequest.Message.builder().role("user").content("hi").build());
+
+    llmService.callWithTools(messages, List.of(tool));
+
+    ArgumentCaptor<GroqCallRequest> requestCaptor =
+        ArgumentCaptor.forClass(GroqCallRequest.class);
+    verify(groqClient).call(requestCaptor.capture());
+
+    assertThat(requestCaptor.getValue().getTools()).containsExactly(tool);
+  }
 }
