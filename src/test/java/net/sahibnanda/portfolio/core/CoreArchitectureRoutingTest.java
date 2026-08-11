@@ -91,6 +91,43 @@ class CoreArchitectureRoutingTest extends AbstractRepositoryIntegrationTest {
     verifyNoInteractions(orchestratorService, workerService);
   }
 
+  @Test
+  void defaultArchitecturePrepareUserPromptStreamCallsOrchestrator() {
+    String sessionId = "stream-default-arch";
+    ChatObject chat = createAnonymousChat(sessionId);
+    when(orchestratorService.route(anyList(), anyString()))
+        .thenReturn(OrchestratorResponse.builder()
+            .requiredContexts(List.of(ContextType.NONE)).reason("none needed")
+            .build());
+
+    ChatStreamHandoff handoff = core.prepareUserPromptStream(
+        ChatRequestPOJO.builder().chatId(chat.getChatId()).message("hi")
+            .sessionId(sessionId).build());
+
+    assertThat(handoff.isError()).isFalse();
+    assertThat(handoff.context().architecture())
+        .isEqualTo(ArchitectureType.ORCHESTRATOR_WORKER);
+    verify(orchestratorService).route(anyList(), anyString());
+  }
+
+  @Test
+  void mcpArchitecturePrepareUserPromptStreamSkipsOrchestrator() {
+    String sessionId = "stream-mcp-arch";
+    ChatObject chat = createAnonymousChat(sessionId);
+
+    ChatStreamHandoff handoff = core.prepareUserPromptStream(
+        ChatRequestPOJO.builder().chatId(chat.getChatId()).message("hi")
+            .sessionId(sessionId).architecture(ArchitectureType.MCP)
+            .mcpBaseUrl("http://localhost:8080").build());
+
+    assertThat(handoff.isError()).isFalse();
+    ChatStreamContext context = handoff.context();
+    assertThat(context.architecture()).isEqualTo(ArchitectureType.MCP);
+    assertThat(context.requiredContexts()).isEmpty();
+    assertThat(context.mcpBaseUrl()).isEqualTo("http://localhost:8080");
+    verifyNoInteractions(orchestratorService);
+  }
+
   private ChatObject createAnonymousChat(final String sessionId) {
     ResponsePOJO created = core.createChat(ChatRequestPOJO.builder()
         .chatTitle("Architecture routing test").sessionId(sessionId).build());

@@ -628,6 +628,10 @@ public class Core {
       log.error("Groq streaming call failed for chat {}", context.chatId(), e);
       sendEvent(emitter, "error", context.chatId(), upstreamError(),
           loggedSendFailure);
+    } catch (McpCallException e) {
+      log.error("MCP streaming call failed for chat {}", context.chatId(), e);
+      sendEvent(emitter, "error", context.chatId(), upstreamError(),
+          loggedSendFailure);
     } catch (Exception e) {
       log.error("Unexpected failure while streaming chat {}", context.chatId(),
           e);
