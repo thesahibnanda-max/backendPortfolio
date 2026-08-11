@@ -191,6 +191,49 @@ host automatically), e.g. `DB_HOST=host.docker.internal`,
 `KAFKA_BOOTSTRAP_SERVERS=host.docker.internal:9092`,
 `OPENSEARCH_HOST=host.docker.internal`.
 
+### Testing the MCP architecture manually
+
+The `"architecture": "mcp"` chat pipeline (see ARCHITECTURE.md) makes its
+own self-referential HTTP call back into this same running instance's MCP
+server, so it can only be verified end-to-end against a real, fully-running
+instance -- not through `mvn clean test` alone. To check it:
+
+1. Copy `stage.env.example` to `stage.env` and fill in a real `GROQ_API_KEYS`
+   (see the file's comments for the rest).
+2. Start the four infrastructure containers (["Running the required
+   infrastructure"](#running-the-required-infrastructure)).
+3. Build and run the image:
+   ```bash
+   docker build -t backend-portfolio .
+   docker run -p 8080:8080 --env-file stage.env backend-portfolio
+   ```
+4. Hit the chat endpoints with `"architecture": "mcp"` (defaults to
+   `"orchestrator-worker"` when omitted):
+   ```bash
+   curl -s -D - -X POST http://localhost:8080/chats \
+     -H "Content-Type: application/json" \
+     -d '{"chatTitle":"MCP test"}' -o /tmp/create.json
+   # copy the X-Session-Id response header and chats[0].chatId from
+   # /tmp/create.json into the two calls below
+
+   curl -X POST "http://localhost:8080/chats/<chatId>/messages" \
+     -H "Content-Type: application/json" \
+     -H "X-Session-Id: <sessionId>" \
+     -d '{"message":"What is your LeetCode rating?","architecture":"mcp"}'
+
+   curl -N -X POST "http://localhost:8080/chats/<chatId>/messages/stream" \
+     -H "Content-Type: application/json" \
+     -H "X-Session-Id: <sessionId>" \
+     -d '{"message":"What is your LeetCode rating?","architecture":"mcp"}'
+   ```
+   A real, tool-derived rating in the answer (not a hallucinated or
+   "I don't know" answer) confirms the MCP tool call actually happened. The
+   response's `architecture` field should read `"mcp"`.
+5. Optionally, run the automated version of the same check --
+   `McpArchitectureSmokeTest`
+   (`src/test/java/net/sahibnanda/portfolio/loadtest/`), disabled by
+   default, see its Javadoc for how to enable it.
+
 ## Running the tests
 
 ```bash

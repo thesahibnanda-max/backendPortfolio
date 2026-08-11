@@ -101,6 +101,53 @@ flow (`Core.userPrompt`):
    triggering a `CHAT_MESSAGE_SAVED_USER`/`CHAT_MESSAGE_SAVED_ASSISTANT`
    observer event (see below).
 
+## The MCP architecture (alternative chat pipeline)
+
+Selected per-request via `"architecture": "mcp"` on `POST
+/chats/{chatId}/messages`(`/stream`) -- default stays the Orchestrator/Worker
+pipeline above. `Core` branches on `ArchitectureType` before ever calling
+`OrchestratorService`:
+
+1. **`McpAiService.respond`/`respondStream`** builds one system prompt (a
+   dedicated `mcp-system.jte`, describing self-directed tool use) and one
+   user prompt (`PromptTemplates.getUserPromptForWorkerAI` with no
+   pre-aggregated context), then opens an `McpToolClient.Session` against
+   this same running instance's own MCP server -- reached at a base URL
+   computed fresh from the incoming request (`Controller`), never a fixed
+   config value: `request.getScheme() + "://" + request.getServerName() +
+   ":" + request.getServerPort()`.
+2. **The MCP server** (`spring.ai.mcp.server.*`, `McpServerConfig`) exposes
+   `DetailsService`'s six `@Tool`-annotated methods (`get_leetcode_details`,
+   etc.) over the MCP streamable-HTTP protocol at `/mcp`.
+3. **The tool-calling loop**: `McpAiService` calls
+   `LLMService.callWithTools`, offering Groq the tools `McpToolClient` listed
+   (translated to Groq's OpenAI-compatible `tools` schema). If Groq's
+   response requests one or more tool calls, `McpAiService` calls them via
+   the same MCP session, appends the results, and calls Groq again -- up to
+   4 rounds -- until a response arrives with no further tool calls, which is
+   the final answer.
+
+```mermaid
+flowchart LR
+    Core2["Core (architecture == MCP)"]
+    McpAi["McpAiService"]
+    McpTool["McpToolClient"]
+    McpServer["This app's own MCP server\n(/mcp)"]
+    DetailsService2["DetailsService @Tool methods"]
+    LLM2["LLMService.callWithTools"]
+    Groq2["GroqClient -> Groq API (tools)"]
+
+    Core2 --> McpAi
+    McpAi --> LLM2 --> Groq2
+    McpAi --> McpTool --> McpServer --> DetailsService2
+```
+
+Every Groq call in this pipeline is non-streaming, including the one that
+produces the final answer -- `McpAiService.respondStream` replays the
+finished answer to the SSE caller in fixed-size chunks rather than relaying
+Groq's own token stream, since tool-calling and native streaming don't
+compose cleanly (see `McpAiService`'s Javadoc).
+
 ## The chat-search pipeline
 
 Chats become full-text searchable through an entirely event-driven path,
