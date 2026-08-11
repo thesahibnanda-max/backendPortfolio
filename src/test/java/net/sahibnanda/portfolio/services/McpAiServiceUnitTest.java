@@ -14,10 +14,12 @@ import java.util.List;
 import java.util.function.Consumer;
 import net.sahibnanda.portfolio.exception.McpCallException;
 import net.sahibnanda.portfolio.mcp.McpToolClient;
+import net.sahibnanda.portfolio.models.GroqCallRequest;
 import net.sahibnanda.portfolio.models.GroqCallResponse;
 import net.sahibnanda.portfolio.templates.PromptTemplates;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 /**
  * Pure-mock unit tests for {@link McpAiService}, exercising the tool-calling
@@ -68,6 +70,7 @@ class McpAiServiceUnitTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   void respondCallsTheRequestedToolThenAsksAgainForTheFinalAnswer() {
     GroqCallResponse.ToolCall toolCall = GroqCallResponse.ToolCall.builder()
         .id("call_1").type("function").function(GroqCallResponse.Function
@@ -83,6 +86,22 @@ class McpAiServiceUnitTest {
 
     assertThat(result).isEqualTo("Your rating is 1800.");
     verify(session).callTool("get_leetcode_details", "{}");
+
+    ArgumentCaptor<List<GroqCallRequest.Message>> messagesCaptor =
+        ArgumentCaptor.forClass(List.class);
+    verify(llmService, times(2)).callWithTools(messagesCaptor.capture(),
+        anyList());
+    List<GroqCallRequest.Message> secondCallMessages =
+        messagesCaptor.getAllValues().get(1);
+
+    int assistantIndex = indexOfRoleWithToolCalls(secondCallMessages);
+    int toolIndex = indexOfToolMessage(secondCallMessages, "call_1");
+
+    assertThat(assistantIndex).isNotEqualTo(-1);
+    assertThat(toolIndex).isNotEqualTo(-1);
+    assertThat(assistantIndex).isLessThan(toolIndex);
+    assertThat(secondCallMessages.get(toolIndex).getContent())
+        .isEqualTo("{\"rating\":1800}");
   }
 
   @Test
@@ -98,6 +117,7 @@ class McpAiServiceUnitTest {
     assertThatThrownBy(
         () -> mcpAiService.respond(BASE_URL, List.of(), USER_MESSAGE))
         .isInstanceOf(McpCallException.class);
+    verify(session, times(1)).close();
   }
 
   @Test
@@ -138,5 +158,30 @@ class McpAiServiceUnitTest {
                 GroqCallResponse.Message.builder().toolCalls(toolCalls).build())
             .build()))
         .build();
+  }
+
+  private static int indexOfRoleWithToolCalls(
+      final List<GroqCallRequest.Message> messages) {
+    for (int i = 0; i < messages.size(); i++) {
+      GroqCallRequest.Message message = messages.get(i);
+      if ("assistant".equals(message.getRole())
+          && message.getToolCalls() != null
+          && !message.getToolCalls().isEmpty()) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  private static int indexOfToolMessage(
+      final List<GroqCallRequest.Message> messages, final String toolCallId) {
+    for (int i = 0; i < messages.size(); i++) {
+      GroqCallRequest.Message message = messages.get(i);
+      if ("tool".equals(message.getRole())
+          && toolCallId.equals(message.getToolCallId())) {
+        return i;
+      }
+    }
+    return -1;
   }
 }

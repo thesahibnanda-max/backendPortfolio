@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
-import lombok.extern.slf4j.Slf4j;
 import net.sahibnanda.portfolio.entity.Message;
 import net.sahibnanda.portfolio.exception.GroqCallException;
 import net.sahibnanda.portfolio.exception.McpCallException;
@@ -34,7 +33,6 @@ import org.springframework.stereotype.Service;
  * #respondStream} provides, {@link #respondStream} replays the finished answer
  * to {@code onToken} in fixed-size chunks once it's fully computed.
  */
-@Slf4j
 @Service
 public final class McpAiService {
 
