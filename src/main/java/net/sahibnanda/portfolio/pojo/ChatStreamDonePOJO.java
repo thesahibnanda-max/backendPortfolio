@@ -7,6 +7,7 @@ import java.time.Instant;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.jackson.Jacksonized;
+import net.sahibnanda.portfolio.enums.ArchitectureType;
 
 /**
  * A wire type sent as the payload of the terminal SSE {@code done} event.
@@ -23,4 +24,7 @@ public final class ChatStreamDonePOJO {
 
   /** When the message was persisted. */
   private final Instant timestamp;
+
+  /** Which AI pipeline answered this request. */
+  private final ArchitectureType architecture;
 }

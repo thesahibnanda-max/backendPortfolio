@@ -240,8 +240,11 @@ public class Controller {
     String sessionId =
         sessionHeaderResolver.resolveSessionId(servletRequest, servletResponse);
     String clientIp = clientIpResolver.resolveClientIp(servletRequest);
-    ChatRequestPOJO merged = enrich(request.toBuilder().chatId(chatId).build(),
-        authToken, sessionId, clientIp);
+    String mcpBaseUrl = servletRequest.getScheme() + "://"
+        + servletRequest.getServerName() + ":" + servletRequest.getServerPort();
+    ChatRequestPOJO merged =
+        enrich(request.toBuilder().chatId(chatId).build(), authToken, sessionId,
+            clientIp).toBuilder().mcpBaseUrl(mcpBaseUrl).build();
     return toResponseEntity(core.userPrompt(merged));
   }
 
@@ -274,8 +277,11 @@ public class Controller {
     String sessionId =
         sessionHeaderResolver.resolveSessionId(servletRequest, servletResponse);
     String clientIp = clientIpResolver.resolveClientIp(servletRequest);
-    ChatRequestPOJO merged = enrich(request.toBuilder().chatId(chatId).build(),
-        authToken, sessionId, clientIp);
+    String mcpBaseUrl = servletRequest.getScheme() + "://"
+        + servletRequest.getServerName() + ":" + servletRequest.getServerPort();
+    ChatRequestPOJO merged =
+        enrich(request.toBuilder().chatId(chatId).build(), authToken, sessionId,
+            clientIp).toBuilder().mcpBaseUrl(mcpBaseUrl).build();
 
     ChatStreamHandoff handoff = core.prepareUserPromptStream(merged);
     if (handoff.isError()) {

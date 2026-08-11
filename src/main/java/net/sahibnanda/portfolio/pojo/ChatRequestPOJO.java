@@ -1,13 +1,16 @@
 package net.sahibnanda.portfolio.pojo;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 import lombok.extern.jackson.Jacksonized;
+import net.sahibnanda.portfolio.enums.ArchitectureType;
 
 @EqualsAndHashCode(callSuper = true)
 @SuperBuilder(toBuilder = true)
@@ -32,4 +35,22 @@ public class ChatRequestPOJO extends RequestPOJO {
 
   /** The user's message. Used only by {@code userPrompt}. */
   private final String message;
+
+  /**
+   * Which AI pipeline should answer this message. Defaults to
+   * {@link ArchitectureType#ORCHESTRATOR_WORKER} when omitted. Used only by
+   * {@code
+   * userPrompt}/{@code userPromptStream}.
+   */
+  @Builder.Default
+  private final ArchitectureType architecture =
+      ArchitectureType.ORCHESTRATOR_WORKER;
+
+  /**
+   * This app's own base URL, resolved by {@code Controller} from the incoming
+   * request -- never supplied by the client's JSON body. Used only when
+   * {@link #architecture} is {@link ArchitectureType#MCP}.
+   */
+  @JsonIgnore
+  private final String mcpBaseUrl;
 }

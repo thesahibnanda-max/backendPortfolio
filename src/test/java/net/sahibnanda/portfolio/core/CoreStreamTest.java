@@ -196,7 +196,7 @@ class CoreStreamTest extends AbstractRepositoryIntegrationTest {
     }).when(workerService).respondStream(any(), anyList(), anyString(), any());
 
     ChatStreamContext context = new ChatStreamContext(true, "zane", chatId,
-        "Hi there", List.of(), List.of());
+        "Hi there", List.of(), List.of(), null, null);
     SseEmitter emitter = mock(SseEmitter.class);
 
     core.streamWorkerAnswer(context, emitter);
@@ -233,7 +233,7 @@ class CoreStreamTest extends AbstractRepositoryIntegrationTest {
         .thenThrow(new GroqCallException("upstream boom"));
 
     ChatStreamContext context = new ChatStreamContext(true, "yusuf", chatId,
-        "Hi there", List.of(), List.of());
+        "Hi there", List.of(), List.of(), null, null);
     SseEmitter emitter = mock(SseEmitter.class);
 
     core.streamWorkerAnswer(context, emitter);
@@ -275,7 +275,7 @@ class CoreStreamTest extends AbstractRepositoryIntegrationTest {
     }).when(workerService).respondStream(any(), anyList(), anyString(), any());
 
     ChatStreamContext context = new ChatStreamContext(true, "ivy", chatId,
-        "Hi there", List.of(), List.of());
+        "Hi there", List.of(), List.of(), null, null);
     SseEmitter emitter = mock(SseEmitter.class);
     doThrow(new IllegalStateException(
         "ResponseBodyEmitter has already " + "completed")).when(emitter)
