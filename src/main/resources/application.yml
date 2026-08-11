@@ -32,6 +32,13 @@ spring:
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
         spring.json.trusted.packages: "*"
+  ai:
+    mcp:
+      server:
+        protocol: streamable
+        name: backend-portfolio-mcp
+        version: 1.0.0
+
 server:
   port: 8080
   tomcat:

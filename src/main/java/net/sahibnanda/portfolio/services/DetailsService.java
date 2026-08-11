@@ -21,6 +21,7 @@ import net.sahibnanda.portfolio.client.GitHubClient;
 import net.sahibnanda.portfolio.client.LeetcodeClient;
 import net.sahibnanda.portfolio.client.ProfileClient;
 import net.sahibnanda.portfolio.config.DetailsProperties;
+import net.sahibnanda.portfolio.constants.MCPToolNames;
 import net.sahibnanda.portfolio.models.CodeforcesUserRatingResponse;
 import net.sahibnanda.portfolio.models.GitHubRepository;
 import net.sahibnanda.portfolio.models.GitHubUser;
@@ -35,6 +36,7 @@ import net.sahibnanda.portfolio.objects.PersonalityDetails;
 import net.sahibnanda.portfolio.objects.ProfessionalDetails;
 import net.sahibnanda.portfolio.objects.ProfileDetails;
 import net.sahibnanda.portfolio.utils.JsonUtils;
+import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Service;
 
 /**
@@ -162,6 +164,10 @@ public final class DetailsService {
    *
    * @return the composed professional details
    */
+  @Tool(
+          name = MCPToolNames.PROFESSIONAL_DETAILS,
+          description = "get professional details about the user"
+  )
   public ProfessionalDetails getProfessionalDetails() {
     Future<LeetcodeUserProfileResponse> leetcodeFuture = executor
         .submit(() -> fetchRawLeetcodeProfile(primaryLeetcodeUsername()));
@@ -195,6 +201,10 @@ public final class DetailsService {
    *
    * @return one entry per configured username
    */
+  @Tool(
+          name = MCPToolNames.LEETCODE_DETAILS,
+          description = "get leetcode details about the user"
+  )
   public List<LeetcodeDetails> getLeetcodeDetails() {
     return runAllParallel(properties.leetcodeUserNames(),
         username -> mapLeetcodeDetails(fetchRawLeetcodeProfile(username)));
@@ -205,6 +215,10 @@ public final class DetailsService {
    *
    * @return one entry per configured handle
    */
+  @Tool(
+          name = MCPToolNames.CODEFORCES_DETAILS,
+          description = "get codeforces details about the user"
+  )
   public List<CodeforcesDetails> getCodeforcesDetails() {
     return runAllParallel(properties.codeforcesUserNames(),
         handle -> mapCodeforcesDetails(handle,
@@ -217,6 +231,10 @@ public final class DetailsService {
    *
    * @return one entry per configured username
    */
+  @Tool(
+          name = MCPToolNames.GITHUB_DETAILS,
+          description = "get github details about the user"
+  )
   public List<GitHubDetails> getGithubDetails() {
     return runAllParallel(properties.githubUserNames(),
         this::fetchGithubDetails);
@@ -229,6 +247,10 @@ public final class DetailsService {
    *
    * @return the composed profile details
    */
+  @Tool(
+          name = MCPToolNames.PROFILE_DETAILS,
+          description = "get profile details about the user"
+  )
   public ProfileDetails getProfileDetails() {
     Future<ProfileResponse> profileFuture =
         executor.submit(this::fetchRawProfile);
@@ -257,6 +279,10 @@ public final class DetailsService {
    *
    * @return the composed personality details
    */
+  @Tool(
+          name = MCPToolNames.PERSONALITY_DETAILS,
+          description = "get personality details about the user"
+  )
   public PersonalityDetails getPersonalityDetails() {
     Future<PersonalityResponse> personalityFuture =
         executor.submit(this::fetchRawPersonality);
