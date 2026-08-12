@@ -93,6 +93,51 @@ public final class LLMService {
   }
 
   /**
+   * Requests a chat completion for an already-built, multi-turn message list,
+   * optionally offering {@code tools} for the model to call -- used by
+   * {@link McpAiService}'s tool-calling loop, which needs the raw
+   * {@link GroqCallResponse} (to inspect
+   * {@code finishReason}/{@code toolCalls}), not just the extracted reply text
+   * {@link #call} returns. Always non-streaming -- see {@link McpAiService}'s
+   * class Javadoc for why.
+   *
+   * @param messages the full conversation so far, oldest first, including the
+   *        system prompt
+   * @param tools the tools the model may call, or {@code null}/empty for none
+   * @return the raw Groq response
+   * @throws NullPointerException if {@code messages} is null
+   * @throws IllegalArgumentException if {@code messages} is empty
+   * @throws net.sahibnanda.portfolio.exception.GroqCallException if the call
+   *         fails
+   */
+  public GroqCallResponse callWithTools(
+      final List<GroqCallRequest.Message> messages,
+      final List<GroqCallRequest.Tool> tools) {
+    Objects.requireNonNull(messages, "messages must not be null");
+    if (messages.isEmpty()) {
+      throw new IllegalArgumentException("messages must not be empty.");
+    }
+
+    ModelSelection selection = resolveModelAndSampling(null, null);
+    // Defensive copy: the caller (McpAiService.converse) passes a mutable,
+    // still-being-appended-to list and keeps mutating it across loop rounds
+    // after this call returns, so a snapshot is required here, matching
+    // buildRequest's own defensive posture.
+    GroqCallRequest.GroqCallRequestBuilder requestBuilder = GroqCallRequest
+        .builder().model(selection.model().getModelId())
+        .messages(List.copyOf(messages)).temperature(selection.temperature())
+        .topP(selection.topP())
+        .maxCompletionTokens(properties.maxCompletionTokens()).stream(false);
+    if (tools != null && !tools.isEmpty()) {
+      requestBuilder.tools(tools);
+    }
+    selection.model().getReasoningEffort()
+        .ifPresent(effort -> requestBuilder.reasoningEffort(effort.getValue()));
+
+    return groqClient.call(requestBuilder.build());
+  }
+
+  /**
    * Validates the given options and builds the shared portions of a Groq chat
    * completion request: model selection, temperature/top-p resolution, the
    * system+user messages list, max completion tokens, and (if the selected
@@ -112,27 +157,44 @@ public final class LLMService {
     requireNonBlank(options.getSystemPrompt(), "systemPrompt");
     requireNonBlank(options.getUserPrompt(), "userPrompt");
 
-    GroqModel model = selectModel();
-    double temperature =
-        options.getTemperature() != null ? options.getTemperature()
-            : RandomUtils.randomInRange(properties.minTemperature(),
-                properties.maxTemperature());
-    double topP = options.getTopP() != null ? options.getTopP()
-        : RandomUtils.randomInRange(properties.minTopP(), properties.maxTopP());
+    ModelSelection selection =
+        resolveModelAndSampling(options.getTemperature(), options.getTopP());
 
     GroqCallRequest.GroqCallRequestBuilder requestBuilder =
-        GroqCallRequest.builder().model(model.getModelId())
+        GroqCallRequest.builder().model(selection.model().getModelId())
             .messages(List.of(
                 GroqCallRequest.Message.builder().role(ROLE_SYSTEM)
                     .content(options.getSystemPrompt()).build(),
                 GroqCallRequest.Message.builder().role(ROLE_USER)
                     .content(options.getUserPrompt()).build()))
-            .temperature(temperature).topP(topP)
+            .temperature(selection.temperature()).topP(selection.topP())
             .maxCompletionTokens(properties.maxCompletionTokens());
-    model.getReasoningEffort()
+    selection.model().getReasoningEffort()
         .ifPresent(effort -> requestBuilder.reasoningEffort(effort.getValue()));
 
     return requestBuilder;
+  }
+
+  /**
+   * Picks a random weighted model and resolves the temperature/top-p to send,
+   * using the given overrides if non-null or a random value within the
+   * configured range otherwise. Shared by {@link #buildRequest} and
+   * {@link #callWithTools}.
+   *
+   * @param temperatureOverride an explicit temperature, or {@code null} to
+   *        randomize it
+   * @param topPOverride an explicit top-p, or {@code null} to randomize it
+   * @return the selected model and resolved sampling parameters
+   */
+  private ModelSelection resolveModelAndSampling(
+      final Double temperatureOverride, final Double topPOverride) {
+    GroqModel model = selectModel();
+    double temperature = temperatureOverride != null ? temperatureOverride
+        : RandomUtils.randomInRange(properties.minTemperature(),
+            properties.maxTemperature());
+    double topP = topPOverride != null ? topPOverride
+        : RandomUtils.randomInRange(properties.minTopP(), properties.maxTopP());
+    return new ModelSelection(model, temperature, topP);
   }
 
   private GroqModel selectModel() {
@@ -152,5 +214,16 @@ public final class LLMService {
     if (StringUtils.isEmpty(value)) {
       throw new IllegalArgumentException(fieldName + " is required.");
     }
+  }
+
+  /**
+   * The model and resolved temperature/top-p picked for one Groq call.
+   *
+   * @param model the selected model
+   * @param temperature the resolved temperature
+   * @param topP the resolved top-p
+   */
+  private record ModelSelection(GroqModel model, double temperature,
+      double topP) {
   }
 }

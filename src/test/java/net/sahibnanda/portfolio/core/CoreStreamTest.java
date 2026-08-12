@@ -21,8 +21,10 @@ import java.util.stream.Collectors;
 import net.sahibnanda.portfolio.cache.ValkeyCache;
 import net.sahibnanda.portfolio.config.ChatLimitsProperties;
 import net.sahibnanda.portfolio.entity.Message;
+import net.sahibnanda.portfolio.enums.ArchitectureType;
 import net.sahibnanda.portfolio.enums.ContextType;
 import net.sahibnanda.portfolio.exception.GroqCallException;
+import net.sahibnanda.portfolio.exception.McpCallException;
 import net.sahibnanda.portfolio.objects.ChatObject;
 import net.sahibnanda.portfolio.objects.OrchestratorResponse;
 import net.sahibnanda.portfolio.pojo.ChatRequestPOJO;
@@ -32,6 +34,7 @@ import net.sahibnanda.portfolio.pojo.ErrorResponsePOJO;
 import net.sahibnanda.portfolio.pojo.ListOfChatResponsePOJO;
 import net.sahibnanda.portfolio.pojo.UserGateRequestPOJO;
 import net.sahibnanda.portfolio.repository.AbstractRepositoryIntegrationTest;
+import net.sahibnanda.portfolio.services.McpAiService;
 import net.sahibnanda.portfolio.services.OrchestratorService;
 import net.sahibnanda.portfolio.services.UserChatService;
 import net.sahibnanda.portfolio.services.WorkerService;
@@ -80,6 +83,9 @@ class CoreStreamTest extends AbstractRepositoryIntegrationTest {
 
   @MockitoBean
   private WorkerService workerService;
+
+  @MockitoBean
+  private McpAiService mcpAiService;
 
   // userPrompt's rate-limit keys are shared (deliberately, per the streaming
   // feature's design) with prepareUserPromptStream, and live in the real,
@@ -196,7 +202,7 @@ class CoreStreamTest extends AbstractRepositoryIntegrationTest {
     }).when(workerService).respondStream(any(), anyList(), anyString(), any());
 
     ChatStreamContext context = new ChatStreamContext(true, "zane", chatId,
-        "Hi there", List.of(), List.of());
+        "Hi there", List.of(), List.of(), null, null);
     SseEmitter emitter = mock(SseEmitter.class);
 
     core.streamWorkerAnswer(context, emitter);
@@ -233,7 +239,7 @@ class CoreStreamTest extends AbstractRepositoryIntegrationTest {
         .thenThrow(new GroqCallException("upstream boom"));
 
     ChatStreamContext context = new ChatStreamContext(true, "yusuf", chatId,
-        "Hi there", List.of(), List.of());
+        "Hi there", List.of(), List.of(), null, null);
     SseEmitter emitter = mock(SseEmitter.class);
 
     core.streamWorkerAnswer(context, emitter);
@@ -247,6 +253,73 @@ class CoreStreamTest extends AbstractRepositoryIntegrationTest {
         .showMessageAsIs(false).errorMessage(UPSTREAM_ERROR_MESSAGE).build());
 
     ChatObject chat = userChatService.getChatById("yusuf", chatId);
+    assertThat(chat.getMessages()).isEmpty();
+  }
+
+  @Test
+  void streamWorkerAnswerWithMcpArchitectureCallsMcpAiServiceNotWorkerService()
+      throws IOException {
+    String token = signUpAndGetToken("mona");
+    String chatId = createChatId(token, "AI Chat");
+    doAnswer(invocation -> {
+      Consumer<String> onToken = invocation.getArgument(3);
+      onToken.accept("Hello");
+      onToken.accept(" MCP");
+      return "Hello MCP";
+    }).when(mcpAiService).respondStream(any(), anyList(), anyString(), any());
+
+    ChatStreamContext context =
+        new ChatStreamContext(true, "mona", chatId, "Hi there", List.of(),
+            List.of(), ArchitectureType.MCP, "http://localhost:8080");
+    SseEmitter emitter = mock(SseEmitter.class);
+
+    core.streamWorkerAnswer(context, emitter);
+
+    verify(mcpAiService).respondStream(anyString(), anyList(), anyString(),
+        any());
+    verifyNoInteractions(workerService);
+
+    ArgumentCaptor<SseEmitter.SseEventBuilder> captor =
+        ArgumentCaptor.forClass(SseEmitter.SseEventBuilder.class);
+    verify(emitter, times(3)).send(captor.capture());
+    verify(emitter, times(1)).complete();
+    List<SseEmitter.SseEventBuilder> sent = captor.getAllValues();
+
+    ChatObject chat = userChatService.getChatById("mona", chatId);
+    assertThat(chat.getMessages()).hasSize(2);
+    assertThat(chat.getMessages().get(1).message()).isEqualTo("Hello MCP");
+    Message lastMessage = chat.getMessages().get(1);
+
+    assertSseEvent(sent.get(2), "done",
+        ChatStreamDonePOJO.builder().message("Hello MCP")
+            .timestamp(lastMessage.timestamp())
+            .architecture(ArchitectureType.MCP).build());
+  }
+
+  @Test
+  void streamWorkerAnswerOnMcpCallExceptionSendsUpstreamErrorEventAndPersistsNothing()
+      throws IOException {
+    String token = signUpAndGetToken("nash");
+    String chatId = createChatId(token, "AI Chat");
+    when(mcpAiService.respondStream(any(), anyList(), anyString(), any()))
+        .thenThrow(new McpCallException("mcp boom"));
+
+    ChatStreamContext context =
+        new ChatStreamContext(true, "nash", chatId, "Hi there", List.of(),
+            List.of(), ArchitectureType.MCP, "http://localhost:8080");
+    SseEmitter emitter = mock(SseEmitter.class);
+
+    core.streamWorkerAnswer(context, emitter);
+
+    ArgumentCaptor<SseEmitter.SseEventBuilder> captor =
+        ArgumentCaptor.forClass(SseEmitter.SseEventBuilder.class);
+    verify(emitter, times(1)).send(captor.capture());
+    verify(emitter, times(1)).complete();
+
+    assertSseEvent(captor.getValue(), "error", ErrorResponsePOJO.builder()
+        .showMessageAsIs(false).errorMessage(UPSTREAM_ERROR_MESSAGE).build());
+
+    ChatObject chat = userChatService.getChatById("nash", chatId);
     assertThat(chat.getMessages()).isEmpty();
   }
 
@@ -275,7 +348,7 @@ class CoreStreamTest extends AbstractRepositoryIntegrationTest {
     }).when(workerService).respondStream(any(), anyList(), anyString(), any());
 
     ChatStreamContext context = new ChatStreamContext(true, "ivy", chatId,
-        "Hi there", List.of(), List.of());
+        "Hi there", List.of(), List.of(), null, null);
     SseEmitter emitter = mock(SseEmitter.class);
     doThrow(new IllegalStateException(
         "ResponseBodyEmitter has already " + "completed")).when(emitter)

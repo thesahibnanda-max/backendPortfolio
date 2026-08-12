@@ -2,6 +2,7 @@ package net.sahibnanda.portfolio.core;
 
 import java.util.List;
 import net.sahibnanda.portfolio.entity.Message;
+import net.sahibnanda.portfolio.enums.ArchitectureType;
 import net.sahibnanda.portfolio.enums.ContextType;
 
 /**
@@ -13,8 +14,13 @@ import net.sahibnanda.portfolio.enums.ContextType;
  * @param userMessage the caller's message text
  * @param boundedHistory the truncated conversation history
  * @param requiredContexts the knowledge domains required to answer the question
+ *        (Orchestrator/Worker architecture only; empty for MCP)
+ * @param architecture which AI pipeline should answer this message
+ * @param mcpBaseUrl this app's own base URL, resolved from the incoming request
+ *        (MCP architecture only; null for Orchestrator/Worker)
  */
 public record ChatStreamContext(boolean authenticated, String callerId,
     String chatId, String userMessage, List<Message> boundedHistory,
-    List<ContextType> requiredContexts) {
+    List<ContextType> requiredContexts, ArchitectureType architecture,
+    String mcpBaseUrl) {
 }

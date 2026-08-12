@@ -101,6 +101,79 @@ flow (`Core.userPrompt`):
    triggering a `CHAT_MESSAGE_SAVED_USER`/`CHAT_MESSAGE_SAVED_ASSISTANT`
    observer event (see below).
 
+## The MCP architecture (alternative chat pipeline)
+
+Selected per-request via `"architecture": "mcp"` on `POST
+/chats/{chatId}/messages`(`/stream`) -- default stays the Orchestrator/Worker
+pipeline above. `Core` branches on `ArchitectureType` before ever calling
+`OrchestratorService`:
+
+1. **`McpAiService.respond`/`respondStream`** builds one system prompt (a
+   dedicated `mcp-system.jte`, describing self-directed tool use) and one
+   user prompt (`PromptTemplates.getUserPromptForWorkerAI` with no
+   pre-aggregated context), then opens an `McpToolClient.Session` against
+   this same running instance's own MCP server -- reached at a loopback base
+   URL built by `Controller` from this app's own configured port
+   (`"http://127.0.0.1:" + serverPort`), never derived from the incoming
+   request. This call is always self-referential (this app calling its own
+   MCP server, never anyone else's), so a fixed loopback address is both
+   correct and proxy-immune: this app runs behind a reverse proxy (Caddy) in
+   production with no `server.forward-headers-strategy` configured, so a
+   URL built from `HttpServletRequest`'s scheme/host/port would resolve to
+   the proxy's public address instead of this app's own, and the
+   self-referential call would fail.
+2. **The MCP server** (`spring.ai.mcp.server.*`, `McpServerConfig`) exposes
+   `DetailsService`'s six `@Tool`-annotated methods (`get_leetcode_details`,
+   etc.) over the MCP streamable-HTTP protocol at `/mcp`.
+3. **The tool-calling loop**: `McpAiService` calls
+   `LLMService.callWithTools`, offering Groq the tools `McpToolClient` listed
+   (translated to Groq's OpenAI-compatible `tools` schema). If Groq's
+   response requests one or more tool calls, `McpAiService` calls them via
+   the same MCP session, appends the results, and calls Groq again -- up to
+   4 rounds -- until a response arrives with no further tool calls, which is
+   the final answer. A per-tool-call failure (a hallucinated tool name, a
+   transient downstream error) doesn't fail the whole request: it's caught
+   and fed back to the model as that tool's result (`"Tool call failed: "
+   + message`), letting the model recover instead of the caller getting a
+   502. If the round limit is reached while the model is still requesting
+   tools, one final call is made with no tools offered, forcing a prose
+   answer from whatever was gathered so far, rather than discarding
+   already-fetched tool results and failing outright.
+
+```mermaid
+flowchart LR
+    Core2["Core (architecture == MCP)"]
+    McpAi["McpAiService"]
+    McpTool["McpToolClient"]
+    McpServer["This app's own MCP server\n(/mcp)"]
+    DetailsService2["DetailsService @Tool methods"]
+    LLM2["LLMService.callWithTools"]
+    Groq2["GroqClient -> Groq API (tools)"]
+
+    Core2 --> McpAi
+    McpAi --> LLM2 --> Groq2
+    McpAi --> McpTool --> McpServer --> DetailsService2
+```
+
+Every Groq call in this pipeline is non-streaming, including the one that
+produces the final answer -- `McpAiService.respondStream` replays the
+finished answer to the SSE caller in fixed-size chunks rather than relaying
+Groq's own token stream, since tool-calling and native streaming don't
+compose cleanly (see `McpAiService`'s Javadoc).
+
+**Known tradeoff: `/mcp` is unauthenticated.** Mounting
+`spring-ai-starter-mcp-server-webmvc` exposes a real, publicly-reachable
+HTTP endpoint at `/mcp` once this app is deployed -- not just reachable by
+its own self-referential call above. This app has no Spring Security, and
+`CorsConfig` allows every origin/method/header on `/**`, so any client can
+call `/mcp` directly and invoke the six read-only `DetailsService` tools,
+bypassing `RateLimitService` and the normal `X-Session-Id`/`X-Auth-Token`
+flow entirely. This is considered low-risk today because every tool `/mcp`
+exposes is read-only, already-public portfolio data, but it should be
+revisited (e.g. restricting CORS/network access to `/mcp`, or adding auth)
+if the MCP server's tool set ever grows to include anything sensitive or
+mutating.
+
 ## The chat-search pipeline
 
 Chats become full-text searchable through an entirely event-driven path,

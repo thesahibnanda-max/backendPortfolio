@@ -96,4 +96,15 @@ class PromptTemplatesTest {
 
     assertThat(userPrompt).doesNotContain("Context:");
   }
+
+  @Test
+  void mcpSystemPromptDescribesSelfDirectedToolUseAndOmitsOrchestratorLanguage() {
+    String systemPrompt =
+        promptTemplates.getSystemPromptForMcpAI("Ada Lovelace");
+
+    assertThat(systemPrompt).contains("Ada Lovelace")
+        .contains("Highest-priority");
+    assertThat(systemPrompt).contains("you decide for yourself");
+    assertThat(systemPrompt).doesNotContain("Orchestrator");
+  }
 }

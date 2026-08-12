@@ -13,6 +13,7 @@ import net.sahibnanda.portfolio.pojo.ResponsePOJO;
 import net.sahibnanda.portfolio.pojo.SearchRequestPOJO;
 import net.sahibnanda.portfolio.pojo.UserGateRequestPOJO;
 import net.sahibnanda.portfolio.utils.JsonUtils;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -58,6 +59,13 @@ public class Controller {
   private final ClientIpResolver clientIpResolver;
 
   /**
+   * This app's own configured HTTP port, used to build the loopback URL
+   * {@code mcpBaseUrl} resolves to for self-referential MCP calls -- see
+   * {@link #userPrompt} and {@link #userPromptStream}.
+   */
+  private final String serverPort;
+
+  /**
    * Constructs a new controller.
    *
    * @param coreService wires every operation this controller exposes
@@ -65,15 +73,20 @@ public class Controller {
    *        for every request
    * @param clientIpResolverParam resolves the caller's IP address for every
    *        request
+   * @param serverPortParam this app's own configured HTTP port, used to build
+   *        the loopback {@code mcpBaseUrl}
    */
   public Controller(final Core coreService,
       final SessionHeaderResolver sessionHeaderResolverParam,
-      final ClientIpResolver clientIpResolverParam) {
+      final ClientIpResolver clientIpResolverParam,
+      @Value("${server.port:8080}") final String serverPortParam) {
     this.core = Objects.requireNonNull(coreService, "core is null");
     this.sessionHeaderResolver = Objects.requireNonNull(
         sessionHeaderResolverParam, "sessionHeaderResolver is null");
     this.clientIpResolver = Objects.requireNonNull(clientIpResolverParam,
         "clientIpResolver is null");
+    this.serverPort =
+        Objects.requireNonNull(serverPortParam, "serverPort is null");
   }
 
   /**
@@ -240,8 +253,10 @@ public class Controller {
     String sessionId =
         sessionHeaderResolver.resolveSessionId(servletRequest, servletResponse);
     String clientIp = clientIpResolver.resolveClientIp(servletRequest);
-    ChatRequestPOJO merged = enrich(request.toBuilder().chatId(chatId).build(),
-        authToken, sessionId, clientIp);
+    String mcpBaseUrl = "http://127.0.0.1:" + serverPort;
+    ChatRequestPOJO merged =
+        enrich(request.toBuilder().chatId(chatId).build(), authToken, sessionId,
+            clientIp).toBuilder().mcpBaseUrl(mcpBaseUrl).build();
     return toResponseEntity(core.userPrompt(merged));
   }
 
@@ -274,8 +289,10 @@ public class Controller {
     String sessionId =
         sessionHeaderResolver.resolveSessionId(servletRequest, servletResponse);
     String clientIp = clientIpResolver.resolveClientIp(servletRequest);
-    ChatRequestPOJO merged = enrich(request.toBuilder().chatId(chatId).build(),
-        authToken, sessionId, clientIp);
+    String mcpBaseUrl = "http://127.0.0.1:" + serverPort;
+    ChatRequestPOJO merged =
+        enrich(request.toBuilder().chatId(chatId).build(), authToken, sessionId,
+            clientIp).toBuilder().mcpBaseUrl(mcpBaseUrl).build();
 
     ChatStreamHandoff handoff = core.prepareUserPromptStream(merged);
     if (handoff.isError()) {

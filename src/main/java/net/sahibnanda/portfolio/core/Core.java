@@ -4,6 +4,8 @@ import lombok.extern.slf4j.Slf4j;
 import net.sahibnanda.portfolio.config.AuthProperties;
 import net.sahibnanda.portfolio.config.ChatLimitsProperties;
 import net.sahibnanda.portfolio.entity.Message;
+import net.sahibnanda.portfolio.enums.ArchitectureType;
+import net.sahibnanda.portfolio.enums.ContextType;
 import net.sahibnanda.portfolio.exception.CacheSetException;
 import net.sahibnanda.portfolio.exception.ChatAccessDeniedException;
 import net.sahibnanda.portfolio.exception.ChatNotFoundException;
@@ -22,6 +24,7 @@ import net.sahibnanda.portfolio.exception.JsonExtractionException;
 import net.sahibnanda.portfolio.exception.KafkaConsumerAlreadyStartedException;
 import net.sahibnanda.portfolio.exception.KafkaOperationException;
 import net.sahibnanda.portfolio.exception.LeetcodeCallException;
+import net.sahibnanda.portfolio.exception.McpCallException;
 import net.sahibnanda.portfolio.exception.OpenSearchOperationException;
 import net.sahibnanda.portfolio.exception.ProfileCallException;
 import net.sahibnanda.portfolio.exception.RateLimitExceededException;
@@ -61,6 +64,7 @@ import net.sahibnanda.portfolio.pojo.UserGateResponsePOJO;
 import net.sahibnanda.portfolio.services.AnonymousChatService;
 import net.sahibnanda.portfolio.services.CronPingService;
 import net.sahibnanda.portfolio.services.DetailsService;
+import net.sahibnanda.portfolio.services.McpAiService;
 import net.sahibnanda.portfolio.services.OrchestratorService;
 import net.sahibnanda.portfolio.services.RateLimitService;
 import net.sahibnanda.portfolio.services.SearchService;
@@ -159,6 +163,9 @@ public class Core {
   /** Executes chat requests against the configured LLM. */
   private final WorkerService workerService;
 
+  /** Answers chat requests using the MCP tool-calling architecture. */
+  private final McpAiService mcpAiService;
+
   /** Configuration for encrypting/decrypting auth tokens. */
   private final AuthProperties authProperties;
 
@@ -218,6 +225,8 @@ public class Core {
    *        visitors
    * @param orchestrator routes chat requests to the appropriate worker
    * @param worker executes chat requests against the configured LLM
+   * @param mcpAiServiceParam answers chat requests using the MCP tool-calling
+   *        architecture
    * @param authConfig configuration for encrypting/decrypting auth tokens
    * @param pingService checks every infrastructure dependency for the health
    *        endpoint
@@ -230,9 +239,9 @@ public class Core {
   public Core(final UserChatService chatService,
       final AnonymousChatService anonymousChats,
       final OrchestratorService orchestrator, final WorkerService worker,
-      final AuthProperties authConfig, final CronPingService pingService,
-      final RateLimitService limitService, final SearchService searcher,
-      final DetailsService detailsFetcher,
+      final McpAiService mcpAiServiceParam, final AuthProperties authConfig,
+      final CronPingService pingService, final RateLimitService limitService,
+      final SearchService searcher, final DetailsService detailsFetcher,
       final ChatLimitsProperties chatLimitsConfig) {
     this.userChatService =
         Objects.requireNonNull(chatService, "userChatService is null");
@@ -242,6 +251,8 @@ public class Core {
         Objects.requireNonNull(orchestrator, "orchestratorService is null");
     this.workerService =
         Objects.requireNonNull(worker, "workerService is null");
+    this.mcpAiService =
+        Objects.requireNonNull(mcpAiServiceParam, "mcpAiService is null");
     this.authProperties =
         Objects.requireNonNull(authConfig, "authProperties is null");
     this.cronPingService =
@@ -447,8 +458,10 @@ public class Core {
   /**
    * Answers the caller's latest message in a chat, persisting both the user's
    * message and the generated reply. Authenticated callers are scoped to their
-   * username; anonymous callers are scoped to their resolved session id -- the
-   * Orchestrator/Worker pipeline itself is identical either way.
+   * username; anonymous callers are scoped to their resolved session id -- that
+   * handling is identical either way, regardless of which answer pipeline is
+   * used. Which pipeline actually answers the message -- Orchestrator/Worker or
+   * MCP -- is selected per-request by {@code request.getArchitecture()}.
    *
    * @param request the auth-token header and/or resolved session id, the chat
    *        identifier, and the message to send
@@ -475,12 +488,20 @@ public class Core {
       }
       List<Message> boundedHistory = ConversationHistoryUtils.truncate(history,
           chatLimits.maxHistoryMessages(), chatLimits.maxHistoryChars());
-      OrchestratorResponse routing =
-          orchestratorService.route(boundedHistory, request.getMessage());
-      log.info("Orchestrator routed to {} ({})", routing.getRequiredContexts(),
-          routing.getReason());
-      String answer = workerService.respond(routing.getRequiredContexts(),
-          boundedHistory, request.getMessage());
+      ArchitectureType architecture = Objects.requireNonNullElse(
+          request.getArchitecture(), ArchitectureType.ORCHESTRATOR_WORKER);
+      String answer;
+      if (architecture == ArchitectureType.MCP) {
+        answer = mcpAiService.respond(request.getMcpBaseUrl(), boundedHistory,
+            request.getMessage());
+      } else {
+        OrchestratorResponse routing =
+            orchestratorService.route(boundedHistory, request.getMessage());
+        log.info("Orchestrator routed to {} ({})",
+            routing.getRequiredContexts(), routing.getReason());
+        answer = workerService.respond(routing.getRequiredContexts(),
+            boundedHistory, request.getMessage());
+      }
 
       ChatObject updatedChat;
       if (authenticated) {
@@ -494,7 +515,7 @@ public class Core {
         updatedChat = anonymousChatService.saveAssistantMessage(callerId,
             request.getChatId(), answer);
       }
-      return buildChatResponse(HttpStatus.OK, updatedChat);
+      return buildChatResponse(HttpStatus.OK, updatedChat, architecture);
     } catch (Exception e) {
       return buildErrorResponse(e);
     }
@@ -536,14 +557,22 @@ public class Core {
       }
       List<Message> boundedHistory = ConversationHistoryUtils.truncate(history,
           chatLimits.maxHistoryMessages(), chatLimits.maxHistoryChars());
-      OrchestratorResponse routing =
-          orchestratorService.route(boundedHistory, request.getMessage());
-      log.info("Orchestrator routed to {} ({})", routing.getRequiredContexts(),
-          routing.getReason());
+      ArchitectureType architecture = Objects.requireNonNullElse(
+          request.getArchitecture(), ArchitectureType.ORCHESTRATOR_WORKER);
+      List<ContextType> requiredContexts;
+      if (architecture == ArchitectureType.MCP) {
+        requiredContexts = List.of();
+      } else {
+        OrchestratorResponse routing =
+            orchestratorService.route(boundedHistory, request.getMessage());
+        log.info("Orchestrator routed to {} ({})",
+            routing.getRequiredContexts(), routing.getReason());
+        requiredContexts = routing.getRequiredContexts();
+      }
 
       return new ChatStreamHandoff(new ChatStreamContext(authenticated,
           callerId, request.getChatId(), request.getMessage(), boundedHistory,
-          routing.getRequiredContexts()), null);
+          requiredContexts, architecture, request.getMcpBaseUrl()), null);
     } catch (Exception e) {
       return new ChatStreamHandoff(null, buildErrorResponse(e));
     }
@@ -571,11 +600,15 @@ public class Core {
       final SseEmitter emitter) {
     AtomicBoolean loggedSendFailure = new AtomicBoolean(false);
     try {
-      String answer = workerService.respondStream(context.requiredContexts(),
-          context.boundedHistory(), context.userMessage(),
+      java.util.function.Consumer<String> onToken =
           delta -> sendEvent(emitter, "token", context.chatId(),
               ChatStreamTokenPOJO.builder().content(delta).build(),
-              loggedSendFailure));
+              loggedSendFailure);
+      String answer = context.architecture() == ArchitectureType.MCP
+          ? mcpAiService.respondStream(context.mcpBaseUrl(),
+              context.boundedHistory(), context.userMessage(), onToken)
+          : workerService.respondStream(context.requiredContexts(),
+              context.boundedHistory(), context.userMessage(), onToken);
 
       ChatObject updatedChat;
       if (context.authenticated()) {
@@ -590,12 +623,17 @@ public class Core {
             .saveAssistantMessage(context.callerId(), context.chatId(), answer);
       }
       Message lastMessage = updatedChat.getMessages().getLast();
-      sendEvent(
-          emitter, "done", context.chatId(), ChatStreamDonePOJO.builder()
-              .message(answer).timestamp(lastMessage.timestamp()).build(),
+      sendEvent(emitter, "done", context.chatId(),
+          ChatStreamDonePOJO.builder().message(answer)
+              .timestamp(lastMessage.timestamp())
+              .architecture(context.architecture()).build(),
           loggedSendFailure);
     } catch (GroqCallException e) {
       log.error("Groq streaming call failed for chat {}", context.chatId(), e);
+      sendEvent(emitter, "error", context.chatId(), upstreamError(),
+          loggedSendFailure);
+    } catch (McpCallException e) {
+      log.error("MCP streaming call failed for chat {}", context.chatId(), e);
       sendEvent(emitter, "error", context.chatId(), upstreamError(),
           loggedSendFailure);
     } catch (Exception e) {
@@ -887,8 +925,14 @@ public class Core {
 
   private ChatResponsePOJO buildChatResponse(final HttpStatus status,
       final ChatObject chat) {
+    return buildChatResponse(status, chat, null);
+  }
+
+  private ChatResponsePOJO buildChatResponse(final HttpStatus status,
+      final ChatObject chat, final ArchitectureType architecture) {
     return ChatResponsePOJO.builder().httpStatusCode(status)
-        .timestamp(LocalDateTime.now()).chat(chat).build();
+        .timestamp(LocalDateTime.now()).chat(chat).architecture(architecture)
+        .build();
   }
 
   private ErrorResponsePOJO buildErrorResponse(final Exception exception) {
@@ -944,6 +988,7 @@ public class Core {
       case CodeforcesCallException _ -> upstreamError();
       case LeetcodeCallException _ -> upstreamError();
       case ProfileCallException _ -> upstreamError();
+      case McpCallException _ -> upstreamError();
 
       // /health's whole purpose is telling the caller which dependency is
       // down; the message only ever names infra types (e.g. "postgres,

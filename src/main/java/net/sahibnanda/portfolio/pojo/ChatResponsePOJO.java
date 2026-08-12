@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 import lombok.extern.jackson.Jacksonized;
+import net.sahibnanda.portfolio.enums.ArchitectureType;
 import net.sahibnanda.portfolio.objects.ChatObject;
 
 @EqualsAndHashCode(callSuper = true)
@@ -21,4 +22,7 @@ public class ChatResponsePOJO extends ResponsePOJO {
 
   /** The chat this response describes. */
   private final ChatObject chat;
+
+  /** Which AI pipeline answered this request, when applicable. */
+  private final ArchitectureType architecture;
 }
