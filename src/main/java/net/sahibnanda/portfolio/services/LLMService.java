@@ -119,9 +119,14 @@ public final class LLMService {
     }
 
     ModelSelection selection = resolveModelAndSampling(null, null);
+    // Defensive copy: the caller (McpAiService.converse) passes a mutable,
+    // still-being-appended-to list and keeps mutating it across loop rounds
+    // after this call returns, so a snapshot is required here, matching
+    // buildRequest's own defensive posture.
     GroqCallRequest.GroqCallRequestBuilder requestBuilder = GroqCallRequest
-        .builder().model(selection.model().getModelId()).messages(messages)
-        .temperature(selection.temperature()).topP(selection.topP())
+        .builder().model(selection.model().getModelId())
+        .messages(List.copyOf(messages)).temperature(selection.temperature())
+        .topP(selection.topP())
         .maxCompletionTokens(properties.maxCompletionTokens()).stream(false);
     if (tools != null && !tools.isEmpty()) {
       requestBuilder.tools(tools);

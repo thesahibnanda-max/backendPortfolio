@@ -5,6 +5,7 @@ import net.sahibnanda.portfolio.config.AuthProperties;
 import net.sahibnanda.portfolio.config.ChatLimitsProperties;
 import net.sahibnanda.portfolio.entity.Message;
 import net.sahibnanda.portfolio.enums.ArchitectureType;
+import net.sahibnanda.portfolio.enums.ContextType;
 import net.sahibnanda.portfolio.exception.CacheSetException;
 import net.sahibnanda.portfolio.exception.ChatAccessDeniedException;
 import net.sahibnanda.portfolio.exception.ChatNotFoundException;
@@ -457,8 +458,10 @@ public class Core {
   /**
    * Answers the caller's latest message in a chat, persisting both the user's
    * message and the generated reply. Authenticated callers are scoped to their
-   * username; anonymous callers are scoped to their resolved session id -- the
-   * Orchestrator/Worker pipeline itself is identical either way.
+   * username; anonymous callers are scoped to their resolved session id -- that
+   * handling is identical either way, regardless of which answer pipeline is
+   * used. Which pipeline actually answers the message -- Orchestrator/Worker or
+   * MCP -- is selected per-request by {@code request.getArchitecture()}.
    *
    * @param request the auth-token header and/or resolved session id, the chat
    *        identifier, and the message to send
@@ -556,9 +559,10 @@ public class Core {
           chatLimits.maxHistoryMessages(), chatLimits.maxHistoryChars());
       ArchitectureType architecture = Objects.requireNonNullElse(
           request.getArchitecture(), ArchitectureType.ORCHESTRATOR_WORKER);
-      List<net.sahibnanda.portfolio.enums.ContextType> requiredContexts =
-          List.of();
-      if (architecture == ArchitectureType.ORCHESTRATOR_WORKER) {
+      List<ContextType> requiredContexts;
+      if (architecture == ArchitectureType.MCP) {
+        requiredContexts = List.of();
+      } else {
         OrchestratorResponse routing =
             orchestratorService.route(boundedHistory, request.getMessage());
         log.info("Orchestrator routed to {} ({})",

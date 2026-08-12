@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import lombok.extern.slf4j.Slf4j;
 import net.sahibnanda.portfolio.entity.Message;
 import net.sahibnanda.portfolio.exception.GroqCallException;
 import net.sahibnanda.portfolio.exception.McpCallException;
@@ -33,6 +34,7 @@ import org.springframework.stereotype.Service;
  * #respondStream} provides, {@link #respondStream} replays the finished answer
  * to {@code onToken} in fixed-size chunks once it's fully computed.
  */
+@Slf4j
 @Service
 public final class McpAiService {
 
@@ -98,16 +100,21 @@ public final class McpAiService {
    * times as it decides it needs to (bounded by {@value #MAX_TOOL_ROUNDS}
    * rounds).
    *
-   * @param mcpBaseUrl this app's own base URL, resolved from the incoming
-   *        request (see {@code Controller})
+   * @param mcpBaseUrl this app's own loopback base URL ({@code
+   *        http://127.0.0.1:<server.port>}), built by {@code Controller} --
+   *        proxy-immune since the MCP call is always self-referential
    * @param conversationHistory prior messages in the conversation, oldest first
    * @param userMessage the user's latest message
    * @return the final natural-language answer
    * @throws IllegalArgumentException if {@code userMessage} is blank
    * @throws GroqCallException if a Groq call fails
-   * @throws McpCallException if the MCP session or a tool call fails, or the
-   *         model never stops requesting tools within {@value #MAX_TOOL_ROUNDS}
-   *         rounds
+   * @throws McpCallException if opening the MCP session or listing its tools
+   *         fails -- a per-tool-call failure is recovered from instead (fed
+   *         back to the model as that tool's result), and exhausting
+   *         {@value #MAX_TOOL_ROUNDS} rounds forces one final no-tools call for
+   *         a prose answer rather than failing outright; this is only thrown
+   *         for the genuinely-defensive case where that forced final call
+   *         itself still requests tools
    */
   public String respond(final String mcpBaseUrl,
       final List<Message> conversationHistory, final String userMessage) {
@@ -120,8 +127,9 @@ public final class McpAiService {
    * Javadoc for why the replay happens after the answer is fully computed
    * rather than as Groq itself streams it.
    *
-   * @param mcpBaseUrl this app's own base URL, resolved from the incoming
-   *        request (see {@code Controller})
+   * @param mcpBaseUrl this app's own loopback base URL ({@code
+   *        http://127.0.0.1:<server.port>}), built by {@code Controller} --
+   *        proxy-immune since the MCP call is always self-referential
    * @param conversationHistory prior messages in the conversation, oldest first
    * @param userMessage the user's latest message
    * @param onToken callback invoked once per chunk, in order
@@ -129,9 +137,13 @@ public final class McpAiService {
    *         every chunk delivered to {@code onToken}
    * @throws IllegalArgumentException if {@code userMessage} is blank
    * @throws GroqCallException if a Groq call fails
-   * @throws McpCallException if the MCP session or a tool call fails, or the
-   *         model never stops requesting tools within {@value #MAX_TOOL_ROUNDS}
-   *         rounds
+   * @throws McpCallException if opening the MCP session or listing its tools
+   *         fails -- a per-tool-call failure is recovered from instead (fed
+   *         back to the model as that tool's result), and exhausting
+   *         {@value #MAX_TOOL_ROUNDS} rounds forces one final no-tools call for
+   *         a prose answer rather than failing outright; this is only thrown
+   *         for the genuinely-defensive case where that forced final call
+   *         itself still requests tools
    */
   public String respondStream(final String mcpBaseUrl,
       final List<Message> conversationHistory, final String userMessage,
@@ -162,6 +174,8 @@ public final class McpAiService {
 
     try (McpToolClient.Session session = mcpToolClient.open(mcpBaseUrl)) {
       List<GroqCallRequest.Tool> tools = session.listToolsAsGroqTools();
+      log.info("Starting MCP conversation with {} tool(s) available",
+          tools.size());
 
       for (int round = 0; round < MAX_TOOL_ROUNDS; round++) {
         GroqCallResponse.Message assistantMessage =
@@ -173,22 +187,59 @@ public final class McpAiService {
           return content == null ? "" : content;
         }
 
-        messages.add(GroqCallRequest.Message.builder().role(ROLE_ASSISTANT)
-            .content(assistantMessage.getContent())
-            .toolCalls(assistantMessage.getToolCalls()).build());
-
-        for (GroqCallResponse.ToolCall toolCall : assistantMessage
-            .getToolCalls()) {
-          String result = session.callTool(toolCall.getFunction().getName(),
-              toolCall.getFunction().getArguments());
-          messages.add(GroqCallRequest.Message.builder().role(ROLE_TOOL)
-              .toolCallId(toolCall.getId()).content(result).build());
-        }
+        appendToolRound(messages, session, assistantMessage, round + 1);
       }
-    }
 
-    throw new McpCallException("Exceeded " + MAX_TOOL_ROUNDS
-        + " MCP tool-call rounds without a final answer.");
+      log.warn("Exceeded {} MCP tool-call rounds; forcing a final no-tools "
+          + "call for a prose answer.", MAX_TOOL_ROUNDS);
+      GroqCallResponse.Message finalMessage =
+          callGroqAndExtractMessage(messages, List.of());
+      if (finalMessage.getToolCalls() != null
+          && !finalMessage.getToolCalls().isEmpty()) {
+        throw new McpCallException("Exceeded " + MAX_TOOL_ROUNDS
+            + " MCP tool-call rounds without a final answer.");
+      }
+      String content = finalMessage.getContent();
+      return content == null ? "" : content;
+    }
+  }
+
+  /**
+   * Appends one round's assistant tool-request message and every tool-result
+   * message to {@code messages}, mutating it in place. A per-tool-call failure
+   * ({@link McpCallException} thrown by {@link McpToolClient.Session#callTool})
+   * is caught and fed back to the model as that tool's result instead of
+   * propagating -- the standard tool-calling recovery pattern: let the model
+   * see the failure and decide how to proceed (apologize, retry a different
+   * tool, or answer without that data) rather than failing the whole request.
+   *
+   * @param messages the running conversation, appended to in place
+   * @param session the open MCP session to call tools on
+   * @param assistantMessage the assistant's tool-requesting message
+   * @param roundNumber the 1-based round number, used only for logging
+   */
+  private void appendToolRound(final List<GroqCallRequest.Message> messages,
+      final McpToolClient.Session session,
+      final GroqCallResponse.Message assistantMessage, final int roundNumber) {
+    messages.add(GroqCallRequest.Message.builder().role(ROLE_ASSISTANT)
+        .content(assistantMessage.getContent())
+        .toolCalls(assistantMessage.getToolCalls()).build());
+
+    for (GroqCallResponse.ToolCall toolCall : assistantMessage.getToolCalls()) {
+      String functionName = toolCall.getFunction().getName();
+      log.info("Calling MCP tool {} (round {})", functionName, roundNumber);
+      String result;
+      try {
+        result = session.callTool(functionName,
+            toolCall.getFunction().getArguments());
+      } catch (McpCallException e) {
+        log.warn("MCP tool {} failed; feeding the failure back to the "
+            + "model: {}", functionName, e.getMessage());
+        result = "Tool call failed: " + e.getMessage();
+      }
+      messages.add(GroqCallRequest.Message.builder().role(ROLE_TOOL)
+          .toolCallId(toolCall.getId()).content(result).build());
+    }
   }
 
   private GroqCallResponse.Message callGroqAndExtractMessage(

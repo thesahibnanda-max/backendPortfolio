@@ -17,11 +17,13 @@ import org.springframework.stereotype.Component;
 /**
  * Opens a short-lived MCP client session against this app's own MCP server (see
  * {@code spring.ai.mcp.server.*} in application.yml, and
- * {@link net.sahibnanda.portfolio.config.McpServerConfig}), reached at a base
- * URL resolved fresh from each incoming HTTP request rather than a fixed
- * configuration value -- so it works unchanged whether the app is reached at
- * {@code localhost:8080}, inside a container, or behind a reverse proxy that
- * forwards the original scheme/host/port.
+ * {@link net.sahibnanda.portfolio.config.McpServerConfig}), reached at a
+ * loopback base URL built by {@code Controller} from this app's own configured
+ * port ({@code http://127.0.0.1:<server.port>}) rather than anything derived
+ * from the caller's request -- this call is always self-referential, so a
+ * loopback address is both correct and immune to a reverse proxy (e.g. Caddy)
+ * sitting in front of the app with no {@code server.forward-headers-strategy}
+ * configured.
  */
 @Component
 public final class McpToolClient {
@@ -29,7 +31,10 @@ public final class McpToolClient {
   /**
    * The MCP endpoint path this server listens on -- must match {@code
    * spring.ai.mcp.server.streamable-http.mcp-endpoint} in application.yml
-   * (Spring's own default, also used here).
+   * (Spring's own default, also used here). If this ever drifts out of sync
+   * with that config value, {@code McpToolClientIntegrationTest} fails
+   * immediately, so this hardcoded literal is safely guarded rather than being
+   * a silent risk.
    */
   private static final String MCP_ENDPOINT_PATH = "/mcp";
 

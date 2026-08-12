@@ -62,4 +62,21 @@ class GroqCallRequestTest {
     assertThat(toolResultJson).contains("\"tool_call_id\":\"call_123\"")
         .contains("\"role\":\"tool\"");
   }
+
+  @Test
+  void toolCallsSerializesAsSnakeCaseOnAnAssistantMessage() {
+    GroqCallResponse.ToolCall toolCall = GroqCallResponse.ToolCall.builder()
+        .id("call_1").type("function").function(GroqCallResponse.Function
+            .builder().name("get_leetcode_details").arguments("{}").build())
+        .build();
+    GroqCallRequest.Message assistantMessage = GroqCallRequest.Message.builder()
+        .role("assistant").toolCalls(List.of(toolCall)).build();
+
+    String json = JsonUtils.toJson(assistantMessage);
+
+    assertThat(json).contains("\"tool_calls\"").contains("\"id\":\"call_1\"")
+        .contains("\"type\":\"function\"")
+        .contains("\"name\":\"get_leetcode_details\"")
+        .contains("\"arguments\":\"{}\"");
+  }
 }

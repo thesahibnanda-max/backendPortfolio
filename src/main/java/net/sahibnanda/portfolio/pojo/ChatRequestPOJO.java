@@ -39,17 +39,17 @@ public class ChatRequestPOJO extends RequestPOJO {
   /**
    * Which AI pipeline should answer this message. Defaults to
    * {@link ArchitectureType#ORCHESTRATOR_WORKER} when omitted. Used only by
-   * {@code
-   * userPrompt}/{@code userPromptStream}.
+   * {@code userPrompt}/{@code userPromptStream}.
    */
   @Builder.Default
   private final ArchitectureType architecture =
       ArchitectureType.ORCHESTRATOR_WORKER;
 
   /**
-   * This app's own base URL, resolved by {@code Controller} from the incoming
-   * request -- never supplied by the client's JSON body. Used only when
-   * {@link #architecture} is {@link ArchitectureType#MCP}.
+   * This app's own loopback base URL, built by {@code Controller} from its own
+   * configured port -- never supplied by the client's JSON body, and never
+   * derived from the caller's request. Used only when {@link #architecture} is
+   * {@link ArchitectureType#MCP}.
    */
   @JsonIgnore
   private final String mcpBaseUrl;

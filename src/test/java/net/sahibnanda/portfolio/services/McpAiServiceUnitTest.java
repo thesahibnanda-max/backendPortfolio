@@ -105,11 +105,38 @@ class McpAiServiceUnitTest {
   }
 
   @Test
-  void respondThrowsAfterExceedingMaxToolRoundsWithoutAFinalAnswer() {
+  void respondForcesAFinalNoToolsCallAfterExceedingMaxToolRoundsAndReturnsIt() {
     GroqCallResponse.ToolCall toolCall = GroqCallResponse.ToolCall.builder()
         .id("call_1").type("function").function(GroqCallResponse.Function
             .builder().name("get_leetcode_details").arguments("{}").build())
         .build();
+    // 4 rounds (MAX_TOOL_ROUNDS) of tool-requesting responses, followed by
+    // one forced call (tools = List.of()) that finally returns prose.
+    when(llmService.callWithTools(anyList(), anyList())).thenReturn(
+        toolCallResponse(List.of(toolCall)),
+        toolCallResponse(List.of(toolCall)),
+        toolCallResponse(List.of(toolCall)),
+        toolCallResponse(List.of(toolCall)), finalAnswerResponse(
+            "Here's what I found before running out of " + "rounds."));
+    when(session.callTool(any(), any())).thenReturn("{}");
+
+    String result = mcpAiService.respond(BASE_URL, List.of(), USER_MESSAGE);
+
+    assertThat(result)
+        .isEqualTo("Here's what I found before running out of rounds.");
+    verify(session, times(4)).callTool(any(), any());
+    verify(llmService, times(5)).callWithTools(anyList(), anyList());
+    verify(session, times(1)).close();
+  }
+
+  @Test
+  void respondThrowsWhenTheForcedFinalNoToolsCallStillRequestsATool() {
+    GroqCallResponse.ToolCall toolCall = GroqCallResponse.ToolCall.builder()
+        .id("call_1").type("function").function(GroqCallResponse.Function
+            .builder().name("get_leetcode_details").arguments("{}").build())
+        .build();
+    // Every call, including the forced final no-tools one, keeps requesting
+    // a tool -- the genuinely-defensive case that should still fail.
     when(llmService.callWithTools(anyList(), anyList()))
         .thenReturn(toolCallResponse(List.of(toolCall)));
     when(session.callTool(any(), any())).thenReturn("{}");
@@ -117,7 +144,40 @@ class McpAiServiceUnitTest {
     assertThatThrownBy(
         () -> mcpAiService.respond(BASE_URL, List.of(), USER_MESSAGE))
         .isInstanceOf(McpCallException.class);
+    verify(llmService, times(5)).callWithTools(anyList(), anyList());
     verify(session, times(1)).close();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void respondFeedsAFailedToolCallBackToTheModelInsteadOfThrowing() {
+    GroqCallResponse.ToolCall toolCall = GroqCallResponse.ToolCall.builder()
+        .id("call_1").type("function").function(GroqCallResponse.Function
+            .builder().name("get_leetcode_details").arguments("{}").build())
+        .build();
+    when(llmService.callWithTools(anyList(), anyList()))
+        .thenReturn(toolCallResponse(List.of(toolCall)))
+        .thenReturn(finalAnswerResponse(
+            "Sorry, I couldn't fetch your LeetCode rating right now."));
+    when(session.callTool("get_leetcode_details", "{}"))
+        .thenThrow(new McpCallException("upstream timed out"));
+
+    String result = mcpAiService.respond(BASE_URL, List.of(), USER_MESSAGE);
+
+    assertThat(result)
+        .isEqualTo("Sorry, I couldn't fetch your LeetCode rating right now.");
+
+    ArgumentCaptor<List<GroqCallRequest.Message>> messagesCaptor =
+        ArgumentCaptor.forClass(List.class);
+    verify(llmService, times(2)).callWithTools(messagesCaptor.capture(),
+        anyList());
+    List<GroqCallRequest.Message> secondCallMessages =
+        messagesCaptor.getAllValues().get(1);
+    int toolIndex = indexOfToolMessage(secondCallMessages, "call_1");
+
+    assertThat(toolIndex).isNotEqualTo(-1);
+    assertThat(secondCallMessages.get(toolIndex).getContent())
+        .contains("Tool call failed").contains("upstream timed out");
   }
 
   @Test
